@@ -35,6 +35,7 @@ export function HourlyForecastTable({ data }: HourlyForecastTableProps) {
                 <th className="text-left p-3 font-semibold">Feels Like</th>
                 <th className="text-left p-3 font-semibold">Humidity</th>
                 <th className="text-left p-3 font-semibold">Wind</th>
+                <th className="text-left p-3 font-semibold">Solar</th>
                 <th className="text-left p-3 font-semibold">UV</th>
                 <th className="text-left p-3 font-semibold">Rain</th>
                 <th className="text-left p-3 font-semibold">Conditions</th>
@@ -70,6 +71,9 @@ export function HourlyForecastTable({ data }: HourlyForecastTableProps) {
                     <td className="p-3">{hour.humidity}%</td>
                     <td className="p-3">
                       <div>{hour.wind_speed_ms.toFixed(1)} m/s</div>
+                    </td>
+                    <td className="p-3">
+                      <div>{hour.solar_radiation?.toFixed(0) || 'N/A'} W/m²</div>
                     </td>
                     <td className="p-3">{hour.uv_index.toFixed(1)}</td>
                     <td className="p-3">{hour.rain_chance}%</td>

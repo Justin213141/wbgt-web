@@ -1,12 +1,12 @@
 1:"$Sreact.fragment"
-2:I[97367,["/wbgt-runner/_next/static/chunks/ff1a16fafef87110.js","/wbgt-runner/_next/static/chunks/64c0a5e3a0354479.js"],"ViewportBoundary"]
-4:I[97367,["/wbgt-runner/_next/static/chunks/ff1a16fafef87110.js","/wbgt-runner/_next/static/chunks/64c0a5e3a0354479.js"],"MetadataBoundary"]
+2:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/64c0a5e3a0354479.js"],"ViewportBoundary"]
+4:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/64c0a5e3a0354479.js"],"MetadataBoundary"]
 5:"$Sreact.suspense"
-:HL["/wbgt-runner/_next/static/chunks/0892442905fb8c09.css","style"]
-:HL["/wbgt-runner/_next/static/chunks/3df75165d9fe4c44.css","style"]
-:HL["/wbgt-runner/_next/static/media/68d403cf9f2c68c5-s.p.f9f15f61.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
-:HL["/wbgt-runner/_next/static/media/797e433ab948586e-s.p.dbea232f.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
-:HL["/wbgt-runner/_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
-0:{"buildId":"Mi42LkCuxiftlhH1N_2tf","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"weekend","paramType":null,"paramKey":"weekend","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"head":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"isHeadPartial":false,"staleTime":300}
+:HL["/wbgt-web/_next/static/chunks/fafa353d7922a409.css","style"]
+:HL["/wbgt-web/_next/static/chunks/3df75165d9fe4c44.css","style"]
+:HL["/wbgt-web/_next/static/media/68d403cf9f2c68c5-s.p.f9f15f61.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/wbgt-web/_next/static/media/797e433ab948586e-s.p.dbea232f.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/wbgt-web/_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+0:{"buildId":"qspErjweDMzIGOg6LbFjR","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"weekend","paramType":null,"paramKey":"weekend","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"head":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"isHeadPartial":false,"staleTime":300}
 3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
 6:[["$","title","0",{"children":"WBGT Weather Dashboard"}],["$","meta","1",{"name":"description","content":"Real-time heat stress monitoring and running recommendations"}],["$","meta","2",{"name":"generator","content":"v0.app"}]]
