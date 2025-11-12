@@ -1,6 +1,6 @@
 export interface WeatherObservation {
-  timestamp: string // Format: DD/MM/YYYY, HH:mm:ss
-  localTimestamp?: string // Alternative field name
+  timestamp: string // ISO 8601 format: YYYY-MM-DDTHH:mm:ss
+  localTimestamp?: string // ISO 8601 format: YYYY-MM-DDTHH:mm:ss (alternative field)
   temperature: number // Celsius
   humidity: number // percentage
   dew_point: number // Celsius

@@ -24,40 +24,7 @@ export function TrendAnalysis({ data }: TrendAnalysisProps) {
     if (!timestamp) return 'Invalid Date'
 
     try {
-      let date: Date
-
-      if (timestamp.includes('/')) {
-        // Parse DD/MM/YYYY, HH:mm:ss format
-        const parts = timestamp.split(', ')
-        if (parts.length !== 2) throw new Error('Invalid timestamp format')
-
-        const [datePart, timePart] = parts
-        const [day, month, year] = datePart.trim().split('/')
-        const timeComponents = timePart.trim().split(':')
-
-        if (timeComponents.length < 2) throw new Error('Invalid time format')
-
-        const [hours, minutes, seconds = '0'] = timeComponents
-
-        // Create date with explicit numeric values
-        const dayNum = parseInt(day, 10)
-        const monthNum = parseInt(month, 10)
-        const yearNum = parseInt(year, 10)
-        const hoursNum = parseInt(hours, 10)
-        const minutesNum = parseInt(minutes, 10)
-        const secondsNum = parseInt(seconds, 10)
-
-        if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum) ||
-            isNaN(hoursNum) || isNaN(minutesNum) || isNaN(secondsNum)) {
-          throw new Error('Invalid numeric values in timestamp')
-        }
-
-        // Note: JavaScript months are 0-indexed, so subtract 1
-        date = new Date(yearNum, monthNum - 1, dayNum, hoursNum, minutesNum, secondsNum)
-      } else {
-        // Try standard ISO format
-        date = new Date(timestamp)
-      }
+      const date = new Date(timestamp)
 
       if (isNaN(date.getTime())) {
         return 'Invalid Date'
