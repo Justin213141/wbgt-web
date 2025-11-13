@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherForecast } from "@/lib/types"
 import { getWBGTZone } from "@/lib/weather-utils"
+import { parseApiDate } from "@/lib/utils"
 
 interface WeekendTimelineProps {
   day1: WeatherForecast[]
@@ -11,12 +12,12 @@ interface WeekendTimelineProps {
 
 export function WeekendTimeline({ day1, day2 }: WeekendTimelineProps) {
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleTimeString("en-US", { hour: "numeric" })
   }
 
   const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleDateString("en-US", { weekday: "long" })
   }
 

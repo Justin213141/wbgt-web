@@ -1,4 +1,5 @@
 "use client"
+import { parseApiDate } from "@/lib/utils"
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherForecast } from "@/lib/types"
@@ -33,7 +34,7 @@ export function WeekendComparison({ day1, day2 }: WeekendComparisonProps) {
   const day2Stats = getDayStats(day2)
 
   const formatDate = (timestamp: string, dayNumber: number) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     const today = new Date()
     const currentDay = today.getDay()
     

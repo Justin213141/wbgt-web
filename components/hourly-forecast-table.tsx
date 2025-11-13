@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherForecast } from "@/lib/types"
 import { getWBGTZone } from "@/lib/weather-utils"
+import { parseApiDate } from "@/lib/utils"
 
 interface HourlyForecastTableProps {
   data: WeatherForecast[]
@@ -10,12 +11,12 @@ interface HourlyForecastTableProps {
 
 export function HourlyForecastTable({ data }: HourlyForecastTableProps) {
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
   }
 
   const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
   }
 

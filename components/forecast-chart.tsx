@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceArea, Area, ComposedChart } from "recharts"
 import { Button } from "./ui/button"
+import { parseApiDate } from "@/lib/utils"
 
 interface ForecastData {
   localTimestamp: string
@@ -34,7 +35,7 @@ export function ForecastChart({ data }: ForecastChartProps) {
   }
 
   const chartData = data.map((item) => ({
-    time: new Date(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+    time: parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     wbgt: item.wbgt,
     temperature: item.temperature,
     humidity: item.humidity,

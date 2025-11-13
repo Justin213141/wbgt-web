@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { Sun, BirdIcon as AirIcon } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceArea, ReferenceLine } from "recharts"
+import { parseApiDate } from "@/lib/utils"
 
 interface EnvironmentalMetricsProps {
   uvIndex: number
@@ -34,14 +35,14 @@ export function EnvironmentalMetrics({ uvIndex, airQuality, forecastData }: Envi
   const aqiLevel = airQuality ? getAQILevel(airQuality) : null
 
   const uvChartData = forecastData.map((item) => ({
-    time: new Date(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric" }),
+    time: parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric" }),
     uv: item.uv_index,
   }))
 
   const aqiChartData = forecastData
     .filter((item) => item.air_quality !== undefined)
     .map((item) => ({
-      time: new Date(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric" }),
+      time: parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric" }),
       aqi: item.air_quality,
     }))
 

@@ -1,4 +1,5 @@
 "use client"
+import { parseApiDate } from "@/lib/utils"
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherForecast } from "@/lib/types"
@@ -52,7 +53,7 @@ export function OptimalTimeFinder({ data }: OptimalTimeFinderProps) {
   const worstTimes = sortedHours.slice(-3).reverse()
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
   }
 

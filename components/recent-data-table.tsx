@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import type { WeatherObservation } from "@/lib/types"
 import { ArrowUp, ArrowDown, Minus } from "lucide-react"
 import { getWBGTZone } from "@/lib/weather-utils"
+import { parseApiDate } from "@/lib/utils"
 
 interface RecentDataTableProps {
   data: WeatherObservation[]
@@ -47,7 +48,7 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
     if (!timestamp) return 'Invalid Date'
 
     try {
-      const date = new Date(timestamp)
+      const date = parseApiDate(timestamp)
 
       if (isNaN(date.getTime())) {
         console.error('Invalid date created from timestamp:', timestamp)

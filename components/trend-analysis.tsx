@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherObservation } from "@/lib/types"
 import { TrendingUp, TrendingDown, Minus, Activity } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts"
+import { parseApiDate } from "@/lib/utils"
 
 interface TrendAnalysisProps {
   data: WeatherObservation[]
@@ -24,7 +25,7 @@ export function TrendAnalysis({ data }: TrendAnalysisProps) {
     if (!timestamp) return 'Invalid Date'
 
     try {
-      const date = new Date(timestamp)
+      const date = parseApiDate(timestamp)
 
       if (isNaN(date.getTime())) {
         return 'Invalid Date'

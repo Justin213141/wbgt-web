@@ -1,4 +1,5 @@
 "use client"
+import { parseApiDate } from "@/lib/utils"
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherForecast } from "@/lib/types"
@@ -61,12 +62,12 @@ export function WeatherWindows({ data }: WeatherWindowsProps) {
   const windows = findWeatherWindows()
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
   }
 
   const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp)
+    const date = parseApiDate(timestamp)
     return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
   }
 
