@@ -47,8 +47,8 @@ export function CurrentConditions({ data }: CurrentConditionsProps) {
 
   return (
     <Card className="h-full">
-      <CardHeader>
-        <CardTitle className="text-lg">Current Conditions</CardTitle>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium text-gray-600">Current Conditions</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4">
