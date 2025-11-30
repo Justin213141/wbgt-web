@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const isGitHubPages = process.env.GITHUB_PAGES === 'true' || process.env.NODE_ENV === 'production'
+
 const nextConfig = {
   output: 'export',
   distDir: 'docs',
@@ -9,8 +11,8 @@ const nextConfig = {
     unoptimized: true,
   },
   // Add basePath for GitHub Pages deployment
-  basePath: process.env.NODE_ENV === 'production' ? '/wbgt-web' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/wbgt-web' : '',
+  basePath: isGitHubPages ? '/wbgt-web' : '',
+  assetPrefix: isGitHubPages ? '/wbgt-web' : '',
 }
 
 export default nextConfig
