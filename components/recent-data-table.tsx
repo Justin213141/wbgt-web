@@ -35,12 +35,16 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
     return 0
   })
 
+  // Compare current row to the OLDER row (higher index) to show trend over time
+  // Data is sorted newest-first, so older data is at higher indices
   const getTrend = (index: number, key: keyof WeatherObservation) => {
-    if (index === 0) return null
+    // Last row has no older data to compare against
+    if (index === data.length - 1) return null
     const current = data[index][key] as number
-    const previous = data[index - 1][key] as number
-    if (current > previous) return "up"
-    if (current < previous) return "down"
+    const older = data[index + 1][key] as number
+    // If current (newer) > older, value increased over time
+    if (current > older) return "up"
+    if (current < older) return "down"
     return "same"
   }
 
