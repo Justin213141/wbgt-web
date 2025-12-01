@@ -106,7 +106,8 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
             </TableHeader>
             <TableBody>
               {sortedData.map((row, index) => {
-                const wbgtZone = getWBGTZone(row.wbgt)
+                const wbgtValue = row.wbgt ?? 0
+                const wbgtZone = getWBGTZone(wbgtValue)
                 const originalIndex = data.indexOf(row)
 
                 return (
@@ -118,18 +119,18 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                           className="inline-block h-3 w-3 rounded-full"
                           style={{
                             backgroundColor:
-                              getWBGTZone(row.wbgt).level === 0
+                              wbgtZone.level === 0
                                 ? "#22c55e" // Optimal - green
-                                : getWBGTZone(row.wbgt).level === 1
+                                : wbgtZone.level === 1
                                   ? "#eab308" // Minor Impact - yellow
-                                  : getWBGTZone(row.wbgt).level === 2
+                                  : wbgtZone.level === 2
                                     ? "#f97316" // Significant Impact - orange
-                                    : getWBGTZone(row.wbgt).level === 3
+                                    : wbgtZone.level === 3
                                       ? "#ef4444" // Major Impact - red
                                       : "#991b1b", // Extreme - dark red
                           }}
                         />
-                        <span className="font-semibold">{row.wbgt.toFixed(1)}°C</span>
+                        <span className="font-semibold">{wbgtValue.toFixed(1)}°C</span>
                         {getTrend(originalIndex, "wbgt") === "up" && <ArrowUp className="h-3 w-3 text-red-500" />}
                         {getTrend(originalIndex, "wbgt") === "down" && <ArrowDown className="h-3 w-3 text-green-500" />}
                         {getTrend(originalIndex, "wbgt") === "same" && <Minus className="h-3 w-3 text-gray-400" />}
@@ -137,7 +138,7 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {row.temperature.toFixed(1)}°C
+                        {(row.temperature ?? 0).toFixed(1)}°C
                         {getTrend(originalIndex, "temperature") === "up" && (
                           <ArrowUp className="h-3 w-3 text-red-500" />
                         )}
@@ -148,7 +149,7 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {row.apparent_temp.toFixed(1)}°C
+                        {(row.apparent_temp ?? 0).toFixed(1)}°C
                         {getTrend(originalIndex, "apparent_temp") === "up" && (
                           <ArrowUp className="h-3 w-3 text-red-500" />
                         )}
@@ -157,9 +158,9 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{row.humidity}%</TableCell>
-                    <TableCell>{row.solar_radiation.toFixed(0)} W/m²</TableCell>
-                    <TableCell>{row.uv_index.toFixed(1)}</TableCell>
+                    <TableCell>{row.humidity ?? 0}%</TableCell>
+                    <TableCell>{(row.solar_radiation ?? 0).toFixed(0)} W/m²</TableCell>
+                    <TableCell>{(row.uv_index ?? 0).toFixed(1)}</TableCell>
                   </TableRow>
                 )
               })}

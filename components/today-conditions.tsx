@@ -29,7 +29,8 @@ interface TodayConditionsProps {
 }
 
 export function TodayConditions({ data, forecastSummary }: TodayConditionsProps) {
-  const zone = getWBGTZone(data.wbgt)
+  const wbgtValue = data.wbgt ?? 0
+  const zone = getWBGTZone(wbgtValue)
   const zoneColors = getWBGTZoneColor(zone)
 
   const timestamp = data.timestamp || data.localTimestamp
@@ -89,13 +90,13 @@ export function TodayConditions({ data, forecastSummary }: TodayConditionsProps)
               className="text-6xl font-bold tracking-tight"
               style={{ color: zoneColors?.text || '#374151' }}
             >
-              {data.wbgt.toFixed(1)}°
+              {wbgtValue.toFixed(1)}°
             </div>
             <div className="text-sm font-medium text-gray-600">WBGT</div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-gray-500">→</span>
               <span className="text-lg font-semibold text-gray-700">
-                {data.temperature.toFixed(1)}°C
+                {(data.temperature ?? 0).toFixed(1)}°C
               </span>
               <span className="text-sm text-gray-500">Temp</span>
             </div>
@@ -105,25 +106,25 @@ export function TodayConditions({ data, forecastSummary }: TodayConditionsProps)
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200/50">
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Humidity</div>
-              <div className="text-lg font-semibold text-gray-800">{data.humidity.toFixed(0)}%</div>
+              <div className="text-lg font-semibold text-gray-800">{(data.humidity ?? 0).toFixed(0)}%</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Dew Point</div>
-              <div className="text-lg font-semibold text-gray-800">{data.dew_point.toFixed(1)}°C</div>
+              <div className="text-lg font-semibold text-gray-800">{(data.dew_point ?? 0).toFixed(1)}°C</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Wind</div>
               <div className="text-lg font-semibold text-gray-800">
-                {(data.wind_speed_ms * 3.6).toFixed(0)} km/h
+                {((data.wind_speed_ms ?? 0) * 3.6).toFixed(0)} km/h
               </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Cloud Cover</div>
-              <div className="text-lg font-semibold text-gray-800">{data.cloud_cover.toFixed(0)}%</div>
+              <div className="text-lg font-semibold text-gray-800">{(data.cloud_cover ?? 0).toFixed(0)}%</div>
             </div>
             <div className="col-span-2">
               <div className="text-xs text-gray-500 uppercase tracking-wide">Solar Radiation</div>
-              <div className="text-lg font-semibold text-gray-800">{data.solar_radiation.toFixed(0)} W/m²</div>
+              <div className="text-lg font-semibold text-gray-800">{(data.solar_radiation ?? 0).toFixed(0)} W/m²</div>
             </div>
           </div>
         </div>
@@ -143,10 +144,10 @@ export function TodayConditions({ data, forecastSummary }: TodayConditionsProps)
             {forecastSummary && (
               <div className="flex gap-2">
                 <span className="px-2 py-1 text-sm font-medium rounded bg-blue-100 text-blue-700">
-                  {forecastSummary.minTemp.toFixed(0)}°
+                  {(forecastSummary.minTemp ?? 0).toFixed(0)}°
                 </span>
                 <span className="px-2 py-1 text-sm font-medium rounded bg-orange-100 text-orange-700">
-                  {forecastSummary.maxTemp.toFixed(0)}°
+                  {(forecastSummary.maxTemp ?? 0).toFixed(0)}°
                 </span>
               </div>
             )}
@@ -154,7 +155,7 @@ export function TodayConditions({ data, forecastSummary }: TodayConditionsProps)
 
           {forecastSummary && (
             <p className="text-sm text-gray-600 mb-4">
-              {forecastSummary.description || `Peak WBGT ${forecastSummary.maxWbgt.toFixed(0)}° expected today.`}
+              {forecastSummary.description || `Peak WBGT ${(forecastSummary.maxWbgt ?? 0).toFixed(0)}° expected today.`}
             </p>
           )}
 

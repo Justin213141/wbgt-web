@@ -10,7 +10,8 @@ interface WBGTDisplayProps {
 }
 
 export function WBGTDisplay({ data }: WBGTDisplayProps) {
-  const zone = getWBGTZone(data.wbgt)
+  const wbgtValue = data.wbgt ?? 0
+  const zone = getWBGTZone(wbgtValue)
   const colors = getWBGTZoneColor(zone)
 
   return (
@@ -27,7 +28,7 @@ export function WBGTDisplay({ data }: WBGTDisplayProps) {
             {zone.level >= 2 && <AlertTriangle className="h-6 w-6" style={{ color: colors.text }} />}
           </div>
           <div className="mb-4 text-6xl font-bold" style={{ color: colors.text }}>
-            {data.wbgt.toFixed(1)}°C
+            {wbgtValue.toFixed(1)}°C
           </div>
           <div
             className="inline-block rounded-full px-4 py-2 text-sm font-bold uppercase tracking-wide"

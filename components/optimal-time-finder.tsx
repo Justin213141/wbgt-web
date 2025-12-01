@@ -77,7 +77,8 @@ export function OptimalTimeFinder({ data }: OptimalTimeFinderProps) {
         <CardContent>
           <div className="space-y-3">
             {bestTimes.map((hour, index) => {
-              const zone = getWBGTZone(hour.wbgt)
+              const wbgtValue = hour.wbgt ?? 0
+              const zone = getWBGTZone(wbgtValue)
               const colors = getScoreColor(hour.score)
 
               return (
@@ -93,20 +94,20 @@ export function OptimalTimeFinder({ data }: OptimalTimeFinderProps) {
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">WBGT:</span>{" "}
-                      <span className="font-semibold">{hour.wbgt.toFixed(1)}°C</span>
+                      <span className="font-semibold">{wbgtValue.toFixed(1)}°C</span>
                       <span className={`ml-1 text-xs ${colors.text}`}>({zone.label})</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">UV:</span>{" "}
-                      <span className="font-semibold">{hour.uv_index.toFixed(1)}</span>
+                      <span className="font-semibold">{(hour.uv_index ?? 0).toFixed(1)}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Rain:</span>{" "}
-                      <span className="font-semibold">{hour.rain_chance}%</span>
+                      <span className="font-semibold">{hour.rain_chance ?? 0}%</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Wind:</span>{" "}
-                      <span className="font-semibold">{hour.wind_speed_ms.toFixed(1)} m/s</span>
+                      <span className="font-semibold">{(hour.wind_speed_ms ?? 0).toFixed(1)} m/s</span>
                     </div>
                   </div>
                 </div>
@@ -127,7 +128,8 @@ export function OptimalTimeFinder({ data }: OptimalTimeFinderProps) {
         <CardContent>
           <div className="space-y-3">
             {worstTimes.map((hour) => {
-              const zone = getWBGTZone(hour.wbgt)
+              const wbgtValue = hour.wbgt ?? 0
+              const zone = getWBGTZone(wbgtValue)
               const colors = getScoreColor(hour.score)
 
               return (
@@ -142,20 +144,20 @@ export function OptimalTimeFinder({ data }: OptimalTimeFinderProps) {
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">WBGT:</span>{" "}
-                      <span className="font-semibold">{hour.wbgt.toFixed(1)}°C</span>
+                      <span className="font-semibold">{wbgtValue.toFixed(1)}°C</span>
                       <span className={`ml-1 text-xs ${colors.text}`}>({zone.label})</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">UV:</span>{" "}
-                      <span className="font-semibold">{hour.uv_index.toFixed(1)}</span>
+                      <span className="font-semibold">{(hour.uv_index ?? 0).toFixed(1)}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Rain:</span>{" "}
-                      <span className="font-semibold">{hour.rain_chance}%</span>
+                      <span className="font-semibold">{hour.rain_chance ?? 0}%</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Wind:</span>{" "}
-                      <span className="font-semibold">{hour.wind_speed_ms.toFixed(1)} m/s</span>
+                      <span className="font-semibold">{(hour.wind_speed_ms ?? 0).toFixed(1)} m/s</span>
                     </div>
                   </div>
                 </div>
