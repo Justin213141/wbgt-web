@@ -7,7 +7,7 @@ export default function Home() {
   const router = useRouter()
 
   useEffect(() => {
-    router.push("/now")
+    router.push("/today")
   }, [router])
 
   return null

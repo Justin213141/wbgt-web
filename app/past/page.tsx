@@ -8,12 +8,10 @@ import { fetchObservations } from "@/lib/api"
 import type { WeatherObservation } from "@/lib/types"
 import { Loader2 } from "lucide-react"
 
-export default function RecentPage() {
+export default function PastPage() {
   const { data: observations, error } = useSWR<WeatherObservation[]>("recent-observations", fetchObservations, {
     refreshInterval: 60000,
   })
-
-  console.log("[v0] Recent observations data:", observations)
 
   const isLoading = !observations
   const hasError = error
@@ -27,21 +25,20 @@ export default function RecentPage() {
         ? (observations as any).observations
         : []
     } else {
-      // Single observation object - wrap in array
       normalizedObservations = [observations as WeatherObservation]
     }
   }
 
-  // Sort observations by timestamp (most recent first) and get last 6 hours
+  // Sort observations by timestamp (most recent first) and get last 8 hours
   const sortedObservations = normalizedObservations.sort((a, b) => {
     const dateA = new Date(a.timestamp || a.localTimestamp || 0)
     const dateB = new Date(b.timestamp || b.localTimestamp || 0)
-    return dateB.getTime() - dateA.getTime() // Most recent first
+    return dateB.getTime() - dateA.getTime()
   })
-  const recentData = sortedObservations.slice(0, 6)
+  const recentData = sortedObservations.slice(0, 8)
 
   return (
-    <PageContainer title="Recent" description="Past 6 hours of observations with data tables and trend analysis">
+    <PageContainer title="Past" description="Past 8 hours of observations">
       {hasError && (
         <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
           Failed to load recent weather data. Please try again later.
@@ -56,11 +53,11 @@ export default function RecentPage() {
 
       {!isLoading && !hasError && recentData.length > 0 && (
         <div className="space-y-6">
-          {/* Trend Analysis */}
-          <TrendAnalysis data={recentData} />
-
-          {/* Data Table */}
+          {/* Data Table - now first */}
           <RecentDataTable data={recentData} />
+
+          {/* Trend Analysis - now second */}
+          <TrendAnalysis data={recentData} />
         </div>
       )}
 

@@ -2,14 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Clock, History, Calendar, CalendarDays, Settings } from "lucide-react"
+import { Sun, History, Calendar, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
-  { href: "/now", label: "Now", icon: Clock },
-  { href: "/recent", label: "Recent", icon: History },
-  { href: "/tomorrow", label: "Tomorrow", icon: Calendar },
-  { href: "/weekend", label: "Weekend", icon: CalendarDays },
+  { href: "/today", label: "Today", icon: Sun },
+  { href: "/past", label: "Past", icon: History },
+  { href: "/future", label: "Future", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
 ]
 

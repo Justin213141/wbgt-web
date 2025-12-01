@@ -262,6 +262,112 @@ function buildBomProxyUrl(lat: number, lon: number): string {
   return `${MODEL_CONFIGS.bom_access.endpoint}?${params.toString()}`
 }
 
+/**
+ * Build URL for Open-Meteo solar radiation data
+ * Used to supplement BOM/ACCESS which doesn't provide solar radiation
+ */
+function buildSolarRadiationUrl(lat: number, lon: number): string {
+  const params = new URLSearchParams({
+    latitude: lat.toString(),
+    longitude: lon.toString(),
+    hourly: 'shortwave_radiation_instant,direct_radiation_instant,diffuse_radiation_instant',
+    timezone: 'auto',
+    past_days: '3',
+    forecast_days: '3'
+  })
+
+  return `https://api.open-meteo.com/v1/forecast?${params.toString()}`
+}
+
+interface SolarRadiationResponse {
+  hourly: {
+    time: string[]
+    shortwave_radiation_instant: number[]
+    direct_radiation_instant: number[]
+    diffuse_radiation_instant: number[]
+  }
+}
+
+/**
+ * Fetch solar radiation data from Open-Meteo to supplement BOM/ACCESS
+ */
+async function fetchSolarRadiation(lat: number, lon: number): Promise<SolarRadiationResponse | null> {
+  const url = buildSolarRadiationUrl(lat, lon)
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    })
+
+    if (!response.ok) {
+      console.warn(`Solar radiation fetch failed: HTTP ${response.status}`)
+      return null
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.warn('Solar radiation fetch error:', error)
+    return null
+  }
+}
+
+/**
+ * Convert timestamp to epoch milliseconds for comparison
+ * Handles both BOM (ISO with Z suffix, UTC) and Open-Meteo (no timezone, local Sydney time)
+ */
+function timestampToEpoch(timestamp: string): number {
+  // If timestamp has Z suffix, it's UTC - parse directly
+  if (timestamp.endsWith('Z')) {
+    return new Date(timestamp).getTime()
+  }
+  // OpenMeteo times are local Sydney time (AEDT = UTC+11 or AEST = UTC+10)
+  // Append timezone offset to parse correctly
+  // Using +11:00 for AEDT (summer time)
+  return new Date(timestamp + ':00+11:00').getTime()
+}
+
+/**
+ * Round epoch to nearest hour for matching (handles minor timestamp differences)
+ */
+function roundToHour(epoch: number): number {
+  return Math.round(epoch / 3600000) * 3600000
+}
+
+/**
+ * Merge solar radiation data into BOM response by matching timestamps
+ */
+function mergeSolarRadiation(
+  bomData: BomProxyResponse,
+  solarData: SolarRadiationResponse | null
+): BomProxyResponse {
+  if (!solarData) {
+    return bomData
+  }
+
+  // Create a map of epoch (rounded to hour) -> radiation for quick lookup
+  const radiationMap = new Map<number, number>()
+  solarData.hourly.time.forEach((time, index) => {
+    const epoch = roundToHour(timestampToEpoch(time))
+    radiationMap.set(epoch, solarData.hourly.shortwave_radiation_instant[index])
+  })
+
+  // Map BOM times to solar radiation values using epoch matching
+  const solarRadiation = bomData.hourly.time.map(time => {
+    const epoch = roundToHour(timestampToEpoch(time))
+    return radiationMap.get(epoch) ?? NaN
+  })
+
+  return {
+    ...bomData,
+    hourly: {
+      ...bomData.hourly,
+      shortwave_radiation: solarRadiation
+    }
+  }
+}
+
 function buildModelUrl(modelName: ModelName, lat: number, lon: number): string {
   if (modelName === 'bom_access') {
     return buildBomProxyUrl(lat, lon)
@@ -313,6 +419,10 @@ export async function fetchSingleModel(
   const config = MODEL_CONFIGS[modelName]
 
   try {
+    // For BOM/ACCESS, fetch solar radiation from Open-Meteo in parallel
+    const isBom = modelName === 'bom_access'
+    const solarPromise = isBom ? fetchSolarRadiation(lat, lon) : Promise.resolve(null)
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -326,7 +436,13 @@ export async function fetchSingleModel(
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
-    const rawData = await response.json()
+    let rawData = await response.json()
+
+    // Merge solar radiation data for BOM/ACCESS
+    if (isBom) {
+      const solarData = await solarPromise
+      rawData = mergeSolarRadiation(rawData as BomProxyResponse, solarData)
+    }
 
     // Increment rate limit counter on success
     incrementRateLimit(modelName)

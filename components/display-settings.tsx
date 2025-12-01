@@ -11,7 +11,7 @@ export function DisplaySettings() {
   const [temperatureUnit, setTemperatureUnit] = useState("celsius")
   const [windUnit, setWindUnit] = useState("ms")
   const [timeFormat, setTimeFormat] = useState("12h")
-  const [compactView, setCompactView] = useState(false)
+  const [compactView, setCompactView] = useState(true) // Default to compact
 
   useEffect(() => {
     // Load settings from localStorage
@@ -21,7 +21,7 @@ export function DisplaySettings() {
       setTemperatureUnit(settings.temperatureUnit ?? "celsius")
       setWindUnit(settings.windUnit ?? "ms")
       setTimeFormat(settings.timeFormat ?? "12h")
-      setCompactView(settings.compactView ?? false)
+      setCompactView(settings.compactView ?? true) // Default to compact
     }
   }, [])
 
