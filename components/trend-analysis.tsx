@@ -68,28 +68,28 @@ export function TrendAnalysis({ data }: TrendAnalysisProps) {
   const trends = [
     {
       label: "WBGT",
-      current: wbgtValues[wbgtValues.length - 1],
+      current: wbgtValues[wbgtValues.length - 1] ?? 0,
       unit: "°C",
       trend: wbgtTrend,
       color: "#ef4444",
     },
     {
       label: "Temperature",
-      current: tempValues[tempValues.length - 1],
+      current: tempValues[tempValues.length - 1] ?? 0,
       unit: "°C",
       trend: tempTrend,
       color: "#f97316",
     },
     {
       label: "Humidity",
-      current: humidityValues[humidityValues.length - 1],
+      current: humidityValues[humidityValues.length - 1] ?? 0,
       unit: "%",
       trend: humidityTrend,
       color: "#3b82f6",
     },
     {
       label: "Wind Speed",
-      current: windValues[windValues.length - 1],
+      current: windValues[windValues.length - 1] ?? 0,
       unit: "m/s",
       trend: windTrend,
       color: "#06b6d4",

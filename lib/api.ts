@@ -59,24 +59,51 @@ export async function fetchObservations(
   try {
     const result = await fetchObservationsWithFallback(lat, longitude, options)
 
-    // Transform to legacy format expected by the app
-    const observations = result.observations.map((obs: ObservationData) => ({
-      timestamp: obs.time,
-      localTimestamp: obs.time,
-      temperature: obs.temperature,
-      humidity: obs.humidity,
-      wind_speed: obs.windSpeed,
-      wind_speed_ms: obs.windSpeed,
-      dew_point: obs.dewPoint,
-      solar_radiation: isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation,
-      direct_radiation: isNaN(obs.directRadiation) ? 0 : obs.directRadiation,
-      diffuse_radiation: isNaN(obs.diffuseRadiation) ? 0 : obs.diffuseRadiation,
-      pressure: obs.pressure,
-      weather_source: obs.source.weather,
-      solar_source: obs.source.solar,
-      pressure_source: obs.source.pressure,
-      station: result.metadata.bomStation
-    }))
+    // Transform to legacy format expected by the app, calculating WBGT for each observation
+    const observations = result.observations.map((obs: ObservationData) => {
+      const solarRad = isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation
+
+      // Calculate WBGT for this observation
+      let wbgt = 0
+      let apparentTemp = obs.temperature
+      try {
+        const wbgtResult = calculateKongWBGT({
+          temperature: obs.temperature,
+          relativeHumidity: obs.humidity,
+          windSpeed: obs.windSpeed,
+          solarRadiation: solarRad,
+          latitude: lat,
+          longitude: longitude,
+          timestamp: new Date(obs.time)
+        })
+        wbgt = wbgtResult.wbgt
+        // Simple apparent temperature estimate
+        apparentTemp = wbgtResult.wetBulbTemp + (wbgtResult.globeTemp - wbgtResult.wetBulbTemp) * 0.5
+      } catch (e) {
+        console.warn('WBGT calculation failed for observation:', obs.time, e)
+      }
+
+      return {
+        timestamp: obs.time,
+        localTimestamp: obs.time,
+        temperature: obs.temperature,
+        humidity: obs.humidity,
+        wind_speed: obs.windSpeed,
+        wind_speed_ms: obs.windSpeed,
+        dew_point: obs.dewPoint,
+        solar_radiation: solarRad,
+        direct_radiation: isNaN(obs.directRadiation) ? 0 : obs.directRadiation,
+        diffuse_radiation: isNaN(obs.diffuseRadiation) ? 0 : obs.diffuseRadiation,
+        pressure: obs.pressure,
+        weather_source: obs.source.weather,
+        solar_source: obs.source.solar,
+        pressure_source: obs.source.pressure,
+        station: result.metadata.bomStation,
+        wbgt,
+        apparent_temp: apparentTemp,
+        uv_index: solarRad > 0 ? Math.min(11, solarRad / 100) : 0 // Rough UV estimate from solar radiation
+      }
+    })
 
     return observations
   } catch (error) {
