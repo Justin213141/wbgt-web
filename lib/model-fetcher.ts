@@ -59,8 +59,8 @@ export interface BomProxyResponse {
     temperature_2m: number[]
     relative_humidity_2m: number[]
     wind_speed_10m: number[]
-    shortwave_radiation: number[]
-    uv_index: number[]
+    shortwave_radiation?: number[]
+    uv_index?: number[]
     dew_point_2m?: number[]
     apparent_temperature?: number[]
     cloud_cover?: number[]
@@ -263,14 +263,14 @@ function buildBomProxyUrl(lat: number, lon: number): string {
 }
 
 /**
- * Build URL for Open-Meteo solar radiation data
- * Used to supplement BOM/ACCESS which doesn't provide solar radiation
+ * Build URL for Open-Meteo supplemental data
+ * Used to supplement BOM/ACCESS which doesn't provide solar radiation, cloud cover, etc.
  */
-function buildSolarRadiationUrl(lat: number, lon: number): string {
+function buildSupplementalDataUrl(lat: number, lon: number): string {
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lon.toString(),
-    hourly: 'shortwave_radiation_instant,direct_radiation_instant,diffuse_radiation_instant',
+    hourly: 'shortwave_radiation_instant,direct_radiation_instant,diffuse_radiation_instant,cloud_cover,dew_point_2m,uv_index',
     timezone: 'auto',
     past_days: '3',
     forecast_days: '3'
@@ -285,14 +285,17 @@ interface SolarRadiationResponse {
     shortwave_radiation_instant: number[]
     direct_radiation_instant: number[]
     diffuse_radiation_instant: number[]
+    cloud_cover?: number[]
+    dew_point_2m?: number[]
+    uv_index?: number[]
   }
 }
 
 /**
- * Fetch solar radiation data from Open-Meteo to supplement BOM/ACCESS
+ * Fetch supplemental data from Open-Meteo to supplement BOM/ACCESS
  */
-async function fetchSolarRadiation(lat: number, lon: number): Promise<SolarRadiationResponse | null> {
-  const url = buildSolarRadiationUrl(lat, lon)
+async function fetchSupplementalData(lat: number, lon: number): Promise<SolarRadiationResponse | null> {
+  const url = buildSupplementalDataUrl(lat, lon)
 
   try {
     const response = await fetch(url, {
@@ -336,34 +339,52 @@ function roundToHour(epoch: number): number {
 }
 
 /**
- * Merge solar radiation data into BOM response by matching timestamps
+ * Merge supplemental data (solar, cloud, dew point, UV) into BOM response
  */
-function mergeSolarRadiation(
+function mergeSupplementalData(
   bomData: BomProxyResponse,
-  solarData: SolarRadiationResponse | null
+  supplementalData: SolarRadiationResponse | null
 ): BomProxyResponse {
-  if (!solarData) {
+  if (!supplementalData) {
     return bomData
   }
 
-  // Create a map of epoch (rounded to hour) -> radiation for quick lookup
+  // Create maps of epoch (rounded to hour) -> values for quick lookup
   const radiationMap = new Map<number, number>()
-  solarData.hourly.time.forEach((time, index) => {
+  const cloudCoverMap = new Map<number, number>()
+  const dewPointMap = new Map<number, number>()
+  const uvIndexMap = new Map<number, number>()
+
+  supplementalData.hourly.time.forEach((time, index) => {
     const epoch = roundToHour(timestampToEpoch(time))
-    radiationMap.set(epoch, solarData.hourly.shortwave_radiation_instant[index])
+    radiationMap.set(epoch, supplementalData.hourly.shortwave_radiation_instant[index])
+    if (supplementalData.hourly.cloud_cover) {
+      cloudCoverMap.set(epoch, supplementalData.hourly.cloud_cover[index])
+    }
+    if (supplementalData.hourly.dew_point_2m) {
+      dewPointMap.set(epoch, supplementalData.hourly.dew_point_2m[index])
+    }
+    if (supplementalData.hourly.uv_index) {
+      uvIndexMap.set(epoch, supplementalData.hourly.uv_index[index])
+    }
   })
 
-  // Map BOM times to solar radiation values using epoch matching
-  const solarRadiation = bomData.hourly.time.map(time => {
-    const epoch = roundToHour(timestampToEpoch(time))
-    return radiationMap.get(epoch) ?? NaN
-  })
+  // Map BOM times to supplemental values using epoch matching
+  const mapValues = (valueMap: Map<number, number>) => {
+    return bomData.hourly.time.map(time => {
+      const epoch = roundToHour(timestampToEpoch(time))
+      return valueMap.get(epoch) ?? NaN
+    })
+  }
 
   return {
     ...bomData,
     hourly: {
       ...bomData.hourly,
-      shortwave_radiation: solarRadiation
+      shortwave_radiation: mapValues(radiationMap),
+      cloud_cover: mapValues(cloudCoverMap),
+      dew_point_2m: mapValues(dewPointMap),
+      uv_index: mapValues(uvIndexMap)
     }
   }
 }
@@ -421,7 +442,7 @@ export async function fetchSingleModel(
   try {
     // For BOM/ACCESS, fetch solar radiation from Open-Meteo in parallel
     const isBom = modelName === 'bom_access'
-    const solarPromise = isBom ? fetchSolarRadiation(lat, lon) : Promise.resolve(null)
+    const supplementalPromise = isBom ? fetchSupplementalData(lat, lon) : Promise.resolve(null)
 
     const response = await fetch(url, {
       method: 'GET',
@@ -438,10 +459,10 @@ export async function fetchSingleModel(
 
     let rawData = await response.json()
 
-    // Merge solar radiation data for BOM/ACCESS
+    // Merge supplemental data for BOM/ACCESS
     if (isBom) {
-      const solarData = await solarPromise
-      rawData = mergeSolarRadiation(rawData as BomProxyResponse, solarData)
+      const supplementalData = await supplementalPromise
+      rawData = mergeSupplementalData(rawData as BomProxyResponse, supplementalData)
     }
 
     // Increment rate limit counter on success

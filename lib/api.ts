@@ -62,15 +62,42 @@ export async function fetchObservations(
     // Transform to legacy format expected by the app, calculating WBGT for each observation
     const observations = result.observations.map((obs: ObservationData) => {
       const solarRad = isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation
+      const temp = isNaN(obs.temperature) ? 20 : obs.temperature
+      const humidity = isNaN(obs.humidity) ? 50 : obs.humidity
+
+      // Calculate dew point from temperature and humidity if not available
+      // Magnus formula approximation
+      let dewPoint = obs.dewPoint
+      if (isNaN(dewPoint) || dewPoint === null || dewPoint === undefined) {
+        const a = 17.27
+        const b = 237.7
+        const alpha = (a * temp) / (b + temp) + Math.log(humidity / 100)
+        dewPoint = (b * alpha) / (a - alpha)
+      }
+
+      // Estimate cloud cover from solar radiation (inverse relationship)
+      // Max solar radiation ~1000 W/m² at noon, scale inversely
+      const hour = new Date(obs.time).getHours()
+      const isNight = hour < 6 || hour > 19
+      let cloudCover = 0
+      if (!isNight && solarRad > 0) {
+        // During daytime, higher solar = lower cloud cover
+        const maxExpectedSolar = 800 // Approximate max for the region
+        cloudCover = Math.max(0, Math.min(100, 100 - (solarRad / maxExpectedSolar) * 100))
+      } else if (isNight) {
+        cloudCover = 50 // Default night cloud cover
+      } else {
+        cloudCover = 100 // No solar = fully cloudy
+      }
 
       // Calculate WBGT for this observation
       let wbgt = 0
-      let apparentTemp = obs.temperature
+      let apparentTemp = temp
       try {
         const wbgtResult = calculateKongWBGT({
-          temperature: obs.temperature,
-          relativeHumidity: obs.humidity,
-          windSpeed: obs.windSpeed,
+          temperature: temp,
+          relativeHumidity: humidity,
+          windSpeed: isNaN(obs.windSpeed) ? 0 : obs.windSpeed,
           solarRadiation: solarRad,
           latitude: lat,
           longitude: longitude,
@@ -86,21 +113,22 @@ export async function fetchObservations(
       return {
         timestamp: obs.time,
         localTimestamp: obs.time,
-        temperature: obs.temperature,
-        humidity: obs.humidity,
-        wind_speed: obs.windSpeed,
-        wind_speed_ms: obs.windSpeed,
-        dew_point: obs.dewPoint,
+        temperature: temp,
+        humidity: humidity,
+        wind_speed: isNaN(obs.windSpeed) ? 0 : obs.windSpeed,
+        wind_speed_ms: isNaN(obs.windSpeed) ? 0 : obs.windSpeed,
+        dew_point: dewPoint,
         solar_radiation: solarRad,
         direct_radiation: isNaN(obs.directRadiation) ? 0 : obs.directRadiation,
         diffuse_radiation: isNaN(obs.diffuseRadiation) ? 0 : obs.diffuseRadiation,
-        pressure: obs.pressure,
+        pressure: isNaN(obs.pressure) ? 1013 : obs.pressure,
         weather_source: obs.source.weather,
         solar_source: obs.source.solar,
         pressure_source: obs.source.pressure,
         station: result.metadata.bomStation,
         wbgt,
         apparent_temp: apparentTemp,
+        cloud_cover: cloudCover,
         uv_index: solarRad > 0 ? Math.min(11, solarRad / 100) : 0 // Rough UV estimate from solar radiation
       }
     })
