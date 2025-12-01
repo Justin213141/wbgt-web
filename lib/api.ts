@@ -13,6 +13,12 @@ import {
   type WBGTResult,
   type ModelEnsemble
 } from './kong-wbgt'
+import {
+  fetchObservationsWithFallback,
+  fetchHistoricalObservations,
+  type ObservationData,
+  type ObservationResult
+} from './observation-fetcher'
 
 // ============================================================================
 // API Endpoints
@@ -23,48 +29,95 @@ const API_BASE = LEGACY_API_BASE // Alias for legacy functions
 const BOM_FORECAST_API = "https://bom-forecast.justin213141.workers.dev"
 
 /**
- * Fetch current observations from BOM + OpenMeteo solar radiation
- * Uses the new bom-forecast worker which merges BOM station data with satellite solar radiation
+ * Fetch current observations using the new observation fetcher with fallback chain
+ *
+ * Weather data priority:
+ * 1. BOM observations (station 95765)
+ * 2. OpenMeteo forecast API (past_days=2)
+ * 3. OpenMeteo archive API
+ *
+ * Solar radiation priority:
+ * 1. Satellite API (satellite_radiation_seamless)
+ * 2. Satellite API (best_match)
+ * 3. OpenMeteo forecast/archive (only if satellite fails)
+ *
+ * Note: Pressure falls back to OpenMeteo if BOM station doesn't report it
+ *
+ * @param latOrKey - Latitude number OR SWR cache key string (which is ignored)
+ * @param lon - Longitude (optional, uses default if not provided)
+ * @param options - Additional options for fetching
  */
-export async function fetchObservations() {
-  // Try new BOM observations endpoint first
+export async function fetchObservations(
+  latOrKey?: number | string,
+  lon?: number,
+  options?: { bomStation?: string; targetDate?: Date }
+) {
+  // Handle SWR usage where key string is passed as first argument
+  // When called by SWR, latOrKey will be the cache key string like "recent-observations"
+  const lat = typeof latOrKey === 'number' ? latOrKey : DEFAULT_LOCATION.lat
+  const longitude = typeof lon === 'number' ? lon : DEFAULT_LOCATION.lon
   try {
-    const response = await fetch(`${BOM_FORECAST_API}/observations?station=95765`)
-    if (response.ok) {
-      const data = await response.json()
+    const result = await fetchObservationsWithFallback(lat, longitude, options)
 
-      // Transform to expected format for the app
-      // The new API returns: { hourly: { time: [], temperature_2m: [], ... }, solar_source: "..." }
-      if (data.hourly && data.hourly.time.length > 0) {
-        const observations = data.hourly.time.map((time: string, i: number) => ({
-          timestamp: time,
-          localTimestamp: time,
-          temperature: data.hourly.temperature_2m[i],
-          humidity: data.hourly.relative_humidity_2m[i],
-          wind_speed: data.hourly.wind_speed_10m[i],
-          wind_speed_ms: data.hourly.wind_speed_10m[i],
-          dew_point: data.hourly.apparent_temperature?.[i] || null,
-          solar_radiation: data.hourly.shortwave_radiation?.[i] || 0,
-          direct_radiation: data.hourly.direct_radiation?.[i] || 0,
-          diffuse_radiation: data.hourly.diffuse_radiation?.[i] || 0,
-          pressure: data.hourly.surface_pressure?.[i] || 1013.25,
-          solar_source: data.solar_source,
-          station: data.station,
-        }))
-        return observations
-      }
-    }
+    // Transform to legacy format expected by the app
+    const observations = result.observations.map((obs: ObservationData) => ({
+      timestamp: obs.time,
+      localTimestamp: obs.time,
+      temperature: obs.temperature,
+      humidity: obs.humidity,
+      wind_speed: obs.windSpeed,
+      wind_speed_ms: obs.windSpeed,
+      dew_point: obs.dewPoint,
+      solar_radiation: isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation,
+      direct_radiation: isNaN(obs.directRadiation) ? 0 : obs.directRadiation,
+      diffuse_radiation: isNaN(obs.diffuseRadiation) ? 0 : obs.diffuseRadiation,
+      pressure: obs.pressure,
+      weather_source: obs.source.weather,
+      solar_source: obs.source.solar,
+      pressure_source: obs.source.pressure,
+      station: result.metadata.bomStation
+    }))
+
+    return observations
   } catch (error) {
-    console.warn('BOM observations fetch failed, falling back to legacy API:', error)
-  }
+    console.warn('New observation fetcher failed, falling back to legacy API:', error)
 
-  // Fall back to legacy API
-  const response = await fetch(`${LEGACY_API_BASE}/observations`)
-  if (!response.ok) {
-    throw new Error("Failed to fetch observations")
+    // Fall back to legacy API
+    const response = await fetch(`${LEGACY_API_BASE}/observations`)
+    if (!response.ok) {
+      throw new Error('Failed to fetch observations')
+    }
+    const result = await response.json()
+    return result.data || result
   }
-  const result = await response.json()
-  return result.data || result
+}
+
+/**
+ * Fetch historical observations for a date range
+ */
+export async function fetchHistoricalObservationsApi(
+  lat: number,
+  lon: number,
+  startDate: string,
+  endDate: string
+) {
+  const result = await fetchHistoricalObservations(lat, lon, startDate, endDate)
+
+  return result.observations.map((obs: ObservationData) => ({
+    timestamp: obs.time,
+    localTimestamp: obs.time,
+    temperature: obs.temperature,
+    humidity: obs.humidity,
+    wind_speed: obs.windSpeed,
+    wind_speed_ms: obs.windSpeed,
+    dew_point: obs.dewPoint,
+    solar_radiation: isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation,
+    direct_radiation: isNaN(obs.directRadiation) ? 0 : obs.directRadiation,
+    diffuse_radiation: isNaN(obs.diffuseRadiation) ? 0 : obs.diffuseRadiation,
+    pressure: obs.pressure,
+    weather_source: obs.source.weather,
+    solar_source: obs.source.solar
+  }))
 }
 
 /**
