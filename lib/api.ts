@@ -61,34 +61,27 @@ export async function fetchObservations(
 
     // Transform to legacy format expected by the app, calculating WBGT for each observation
     const observations = result.observations.map((obs: ObservationData) => {
-      const solarRad = isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation
+      // Handle potential NaN values with fallbacks
       const temp = isNaN(obs.temperature) ? 20 : obs.temperature
       const humidity = isNaN(obs.humidity) ? 50 : obs.humidity
+      const windSpeed = isNaN(obs.windSpeed) ? 0 : obs.windSpeed
+      const solarRad = isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation
+      const dewPoint = isNaN(obs.dewPoint) ? temp - ((100 - humidity) / 5) : obs.dewPoint // Simple estimate if missing
+      const pressure = isNaN(obs.pressure) ? 1013 : obs.pressure
 
-      // Calculate dew point from temperature and humidity if not available
-      // Magnus formula approximation
-      let dewPoint = obs.dewPoint
-      if (isNaN(dewPoint) || dewPoint === null || dewPoint === undefined) {
-        const a = 17.27
-        const b = 237.7
-        const alpha = (a * temp) / (b + temp) + Math.log(humidity / 100)
-        dewPoint = (b * alpha) / (a - alpha)
-      }
-
-      // Estimate cloud cover from solar radiation (inverse relationship)
-      // Max solar radiation ~1000 W/m² at noon, scale inversely
+      // Estimate cloud cover from solar radiation (BOM observations don't include it)
       const hour = new Date(obs.time).getHours()
       const isNight = hour < 6 || hour > 19
-      let cloudCover = 0
+      let cloudCover = 50 // Default
       if (!isNight && solarRad > 0) {
-        // During daytime, higher solar = lower cloud cover
-        const maxExpectedSolar = 800 // Approximate max for the region
+        const maxExpectedSolar = 900
         cloudCover = Math.max(0, Math.min(100, 100 - (solarRad / maxExpectedSolar) * 100))
-      } else if (isNight) {
-        cloudCover = 50 // Default night cloud cover
-      } else {
-        cloudCover = 100 // No solar = fully cloudy
+      } else if (!isNight && solarRad === 0) {
+        cloudCover = 100
       }
+
+      // Estimate UV index from solar radiation (if not available from source)
+      const uvIndex = solarRad > 0 ? Math.min(11, solarRad / 80) : 0
 
       // Calculate WBGT for this observation
       let wbgt = 0
@@ -97,14 +90,13 @@ export async function fetchObservations(
         const wbgtResult = calculateKongWBGT({
           temperature: temp,
           relativeHumidity: humidity,
-          windSpeed: isNaN(obs.windSpeed) ? 0 : obs.windSpeed,
+          windSpeed: windSpeed,
           solarRadiation: solarRad,
           latitude: lat,
           longitude: longitude,
           timestamp: new Date(obs.time)
         })
         wbgt = wbgtResult.wbgt
-        // Simple apparent temperature estimate
         apparentTemp = wbgtResult.wetBulbTemp + (wbgtResult.globeTemp - wbgtResult.wetBulbTemp) * 0.5
       } catch (e) {
         console.warn('WBGT calculation failed for observation:', obs.time, e)
@@ -115,13 +107,13 @@ export async function fetchObservations(
         localTimestamp: obs.time,
         temperature: temp,
         humidity: humidity,
-        wind_speed: isNaN(obs.windSpeed) ? 0 : obs.windSpeed,
-        wind_speed_ms: isNaN(obs.windSpeed) ? 0 : obs.windSpeed,
+        wind_speed: windSpeed,
+        wind_speed_ms: windSpeed,
         dew_point: dewPoint,
         solar_radiation: solarRad,
         direct_radiation: isNaN(obs.directRadiation) ? 0 : obs.directRadiation,
         diffuse_radiation: isNaN(obs.diffuseRadiation) ? 0 : obs.diffuseRadiation,
-        pressure: isNaN(obs.pressure) ? 1013 : obs.pressure,
+        pressure: pressure,
         weather_source: obs.source.weather,
         solar_source: obs.source.solar,
         pressure_source: obs.source.pressure,
@@ -129,7 +121,7 @@ export async function fetchObservations(
         wbgt,
         apparent_temp: apparentTemp,
         cloud_cover: cloudCover,
-        uv_index: solarRad > 0 ? Math.min(11, solarRad / 100) : 0 // Rough UV estimate from solar radiation
+        uv_index: uvIndex
       }
     })
 
