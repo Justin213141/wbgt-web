@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "postbuild": "touch docs/.nojekyll",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start"
