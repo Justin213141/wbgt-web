@@ -5,6 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceArea, Area, ComposedChart } from "recharts"
 import { Button } from "./ui/button"
 import { parseApiDate } from "@/lib/utils"
+import { ConfidenceBadgeFromLevel } from "./confidence-badge"
+import { ModelLegend } from "./model-legend"
+import { getOverallConfidence, type EnsembleDataPoint } from "@/lib/ensemble-utils"
+import type { WeatherModelId } from "@/lib/types"
 
 interface ForecastData {
   localTimestamp: string
@@ -16,11 +20,19 @@ interface ForecastData {
   rain_chance: number
 }
 
-interface ForecastChartProps {
-  data: ForecastData[]
+interface EnsembleData {
+  wbgt: EnsembleDataPoint[]
+  temperature: EnsembleDataPoint[]
 }
 
-export function ForecastChart({ data }: ForecastChartProps) {
+interface ForecastChartProps {
+  data: ForecastData[]
+  ensembleData?: EnsembleData
+  models?: WeatherModelId[]
+  showUncertainty?: boolean
+}
+
+export function ForecastChart({ data, ensembleData, models = [], showUncertainty = true }: ForecastChartProps) {
   const [visibleLines, setVisibleLines] = useState({
     wbgt: true,
     temperature: true,
@@ -29,20 +41,41 @@ export function ForecastChart({ data }: ForecastChartProps) {
     wind_speed_ms: false,
     rain_chance: false,
   })
+  const [showBands, setShowBands] = useState(showUncertainty)
 
   const toggleLine = (key: keyof typeof visibleLines) => {
     setVisibleLines((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const chartData = data.map((item) => ({
-    time: parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-    wbgt: item.wbgt,
-    temperature: item.temperature,
-    humidity: item.humidity,
-    solar_radiation: item.solar_radiation,
-    wind_speed_ms: item.wind_speed_ms,
-    rain_chance: item.rain_chance,
-  }))
+  // Merge forecast data with ensemble uncertainty data
+  const chartData = data.map((item, idx) => {
+    const time = parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    const wbgtEnsemble = ensembleData?.wbgt?.[idx]
+    const tempEnsemble = ensembleData?.temperature?.[idx]
+
+    return {
+      time,
+      wbgt: item.wbgt,
+      temperature: item.temperature,
+      humidity: item.humidity,
+      solar_radiation: item.solar_radiation,
+      wind_speed_ms: item.wind_speed_ms,
+      rain_chance: item.rain_chance,
+      // WBGT uncertainty bands
+      wbgtUpper: wbgtEnsemble ? wbgtEnsemble.mean + wbgtEnsemble.stdDev : undefined,
+      wbgtLower: wbgtEnsemble ? wbgtEnsemble.mean - wbgtEnsemble.stdDev : undefined,
+      wbgtMin: wbgtEnsemble?.min,
+      wbgtMax: wbgtEnsemble?.max,
+      // Temperature uncertainty bands
+      tempUpper: tempEnsemble ? tempEnsemble.mean + tempEnsemble.stdDev : undefined,
+      tempLower: tempEnsemble ? tempEnsemble.mean - tempEnsemble.stdDev : undefined,
+      tempMin: tempEnsemble?.min,
+      tempMax: tempEnsemble?.max,
+    }
+  })
+
+  // Calculate overall confidence for WBGT if ensemble data exists
+  const wbgtConfidence = ensembleData?.wbgt ? getOverallConfidence(ensembleData.wbgt) : null
 
   const temperatureMetrics = [
     { key: "wbgt", label: "WBGT", color: "#ef4444", unit: "°C", yAxisId: "temp" },
@@ -64,10 +97,20 @@ export function ForecastChart({ data }: ForecastChartProps) {
 
   const allMetrics = [...temperatureMetrics, ...percentageMetrics, ...solarMetrics, ...windMetrics]
 
+  const hasEnsembleData = ensembleData && ensembleData.wbgt.length > 0
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">6-Hour Forecast</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">6-Hour Forecast</CardTitle>
+          {wbgtConfidence && (
+            <ConfidenceBadgeFromLevel level={wbgtConfidence} />
+          )}
+        </div>
+        {models.length > 0 && (
+          <ModelLegend models={models} className="mt-1" compact />
+        )}
         <div className="flex flex-wrap gap-2 mt-4">
           {allMetrics.map((metric) => (
             <Button
@@ -85,6 +128,16 @@ export function ForecastChart({ data }: ForecastChartProps) {
               {metric.label}
             </Button>
           ))}
+          {hasEnsembleData && (
+            <Button
+              variant={showBands ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowBands(!showBands)}
+              className="text-xs ml-2"
+            >
+              {showBands ? "Hide" : "Show"} Uncertainty
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -92,7 +145,7 @@ export function ForecastChart({ data }: ForecastChartProps) {
           Temp (L) | % (R)
         </div>
         <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+          <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="time" stroke="#6b7280" style={{ fontSize: "12px" }} />
             
@@ -194,6 +247,81 @@ export function ForecastChart({ data }: ForecastChartProps) {
                 )
               }}
             />
+            {/* WBGT Uncertainty Bands - Min/Max range (lightest) */}
+            {visibleLines.wbgt && showBands && hasEnsembleData && (
+              <Area
+                yAxisId="temp"
+                type="monotone"
+                dataKey="wbgtMax"
+                stroke="none"
+                fill="#ef4444"
+                fillOpacity={0.1}
+                name="wbgtMax"
+                legendType="none"
+              />
+            )}
+            {visibleLines.wbgt && showBands && hasEnsembleData && (
+              <Area
+                yAxisId="temp"
+                type="monotone"
+                dataKey="wbgtMin"
+                stroke="none"
+                fill="white"
+                fillOpacity={1}
+                name="wbgtMin"
+                legendType="none"
+              />
+            )}
+            {/* WBGT Uncertainty Bands - ±1 Std Dev (medium) */}
+            {visibleLines.wbgt && showBands && hasEnsembleData && (
+              <Area
+                yAxisId="temp"
+                type="monotone"
+                dataKey="wbgtUpper"
+                stroke="none"
+                fill="#ef4444"
+                fillOpacity={0.2}
+                name="wbgtUpper"
+                legendType="none"
+              />
+            )}
+            {visibleLines.wbgt && showBands && hasEnsembleData && (
+              <Area
+                yAxisId="temp"
+                type="monotone"
+                dataKey="wbgtLower"
+                stroke="none"
+                fill="white"
+                fillOpacity={1}
+                name="wbgtLower"
+                legendType="none"
+              />
+            )}
+            {/* Temperature Uncertainty Bands - ±1 Std Dev */}
+            {visibleLines.temperature && showBands && hasEnsembleData && (
+              <Area
+                yAxisId="temp"
+                type="monotone"
+                dataKey="tempUpper"
+                stroke="none"
+                fill="#f97316"
+                fillOpacity={0.15}
+                name="tempUpper"
+                legendType="none"
+              />
+            )}
+            {visibleLines.temperature && showBands && hasEnsembleData && (
+              <Area
+                yAxisId="temp"
+                type="monotone"
+                dataKey="tempLower"
+                stroke="none"
+                fill="white"
+                fillOpacity={1}
+                name="tempLower"
+                legendType="none"
+              />
+            )}
             {/* Temperature lines - Left Y-Axis */}
             {visibleLines.wbgt && (
               <Line
@@ -202,7 +330,7 @@ export function ForecastChart({ data }: ForecastChartProps) {
                 dataKey="wbgt"
                 stroke="#ef4444"
                 strokeWidth={3}
-                name="WBGT (°C)"
+                name="wbgt"
                 dot={{ fill: "#ef4444", r: 4 }}
               />
             )}
@@ -213,7 +341,7 @@ export function ForecastChart({ data }: ForecastChartProps) {
                 dataKey="temperature"
                 stroke="#f97316"
                 strokeWidth={2}
-                name="Temperature (°C)"
+                name="temperature"
                 dot={{ fill: "#f97316", r: 3 }}
               />
             )}
@@ -266,7 +394,7 @@ export function ForecastChart({ data }: ForecastChartProps) {
                 dot={{ fill: "#6b7280", r: 3 }}
               />
             )}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>

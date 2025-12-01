@@ -8,7 +8,6 @@ interface CurrentConditionsProps {
     wind_speed_ms: number
     solar_radiation: number
     cloud_cover: number
-    apparent_temp: number
     dew_point: number
   }
 }
@@ -19,7 +18,7 @@ export function CurrentConditions({ data }: CurrentConditionsProps) {
       icon: ThermometerSun,
       label: "Temperature",
       value: `${data.temperature.toFixed(1)}°C`,
-      subValue: `Feels like: ${data.apparent_temp.toFixed(1)}°C`,
+      subValue: `${((data.temperature * 9/5) + 32).toFixed(1)}°F`,
       color: "text-orange-600",
     },
     {

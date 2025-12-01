@@ -15,22 +15,55 @@ import {
 } from './kong-wbgt'
 
 // ============================================================================
-// Legacy API (Cloudflare Worker) - Backward Compatibility
+// API Endpoints
 // ============================================================================
 
-const API_BASE = "https://wbgt-mcp-server.justin213141.workers.dev/api"
+const LEGACY_API_BASE = "https://wbgt-mcp-server.justin213141.workers.dev/api"
+const API_BASE = LEGACY_API_BASE // Alias for legacy functions
+const BOM_FORECAST_API = "https://bom-forecast.justin213141.workers.dev"
 
 /**
- * Fetch observations from legacy API
- * Used by Recent page for historical data
+ * Fetch current observations from BOM + OpenMeteo solar radiation
+ * Uses the new bom-forecast worker which merges BOM station data with satellite solar radiation
  */
 export async function fetchObservations() {
-  const response = await fetch(`${API_BASE}/observations`)
+  // Try new BOM observations endpoint first
+  try {
+    const response = await fetch(`${BOM_FORECAST_API}/observations?station=95765`)
+    if (response.ok) {
+      const data = await response.json()
+
+      // Transform to expected format for the app
+      // The new API returns: { hourly: { time: [], temperature_2m: [], ... }, solar_source: "..." }
+      if (data.hourly && data.hourly.time.length > 0) {
+        const observations = data.hourly.time.map((time: string, i: number) => ({
+          timestamp: time,
+          localTimestamp: time,
+          temperature: data.hourly.temperature_2m[i],
+          humidity: data.hourly.relative_humidity_2m[i],
+          wind_speed: data.hourly.wind_speed_10m[i],
+          wind_speed_ms: data.hourly.wind_speed_10m[i],
+          dew_point: data.hourly.apparent_temperature?.[i] || null,
+          solar_radiation: data.hourly.shortwave_radiation?.[i] || 0,
+          direct_radiation: data.hourly.direct_radiation?.[i] || 0,
+          diffuse_radiation: data.hourly.diffuse_radiation?.[i] || 0,
+          pressure: data.hourly.surface_pressure?.[i] || 1013.25,
+          solar_source: data.solar_source,
+          station: data.station,
+        }))
+        return observations
+      }
+    }
+  } catch (error) {
+    console.warn('BOM observations fetch failed, falling back to legacy API:', error)
+  }
+
+  // Fall back to legacy API
+  const response = await fetch(`${LEGACY_API_BASE}/observations`)
   if (!response.ok) {
     throw new Error("Failed to fetch observations")
   }
   const result = await response.json()
-  // Handle API wrapper format: { success: true, data: [...] }
   return result.data || result
 }
 

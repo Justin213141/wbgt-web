@@ -11,7 +11,8 @@ import useSWR from "swr"
 import { fetchObservations } from "@/lib/api"
 import { fetchAllModels, type ModelName, getSuccessfulModels } from "@/lib/model-fetcher"
 import { calculateKongWBGT, calculateBatchWBGT, type WBGTParams } from "@/lib/kong-wbgt"
-import type { WeatherObservation, WeatherForecast } from "@/lib/types"
+import type { WeatherObservation, WeatherForecast, WeatherModelId } from "@/lib/types"
+import { calculateEnsembleStats, type EnsembleDataPoint } from "@/lib/ensemble-utils"
 import { Loader2, Settings } from "lucide-react"
 import { parseApiDate } from "@/lib/utils"
 import { useState, useEffect, useMemo } from "react"
@@ -73,15 +74,15 @@ export default function NowPage() {
     }
   )
 
-  console.log("[v0] Model results:", modelResults)
-  console.log("[v0] Raw observations data:", observationsData)
-
-  // Calculate WBGT from multi-model data
-  const forecast: WeatherForecast[] = useMemo(() => {
-    if (!modelResults) return []
+  // Calculate WBGT from multi-model data with ensemble statistics
+  const { forecast, ensembleData, activeModels } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[] }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return []
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[] }
+
+    // Get model IDs for legend display
+    const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
 
     // Use first successful model's time array as reference
     const refModel = successfulModels[0]
@@ -90,6 +91,10 @@ export default function NowPage() {
     // Limit to first 6 hours
     const maxHours = 6
     const limitedTimes = times.slice(0, maxHours)
+
+    // Arrays to collect all values for ensemble stats
+    const wbgtEnsemble: EnsembleDataPoint[] = []
+    const tempEnsemble: EnsembleDataPoint[] = []
 
     // Calculate WBGT for each model at each time
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
@@ -117,10 +122,42 @@ export default function NowPage() {
         }
       })
 
-      // Calculate ensemble mean
-      const wbgt = wbgtValues.reduce((a, b) => a + b, 0) / wbgtValues.length
-      const temperature = tempValues.reduce((a, b) => a + b, 0) / tempValues.length
+      // Calculate ensemble stats for WBGT
+      const wbgtStats = calculateEnsembleStats(wbgtValues)
+      wbgtEnsemble.push({
+        time,
+        mean: wbgtStats.mean,
+        stdDev: wbgtStats.stdDev,
+        min: wbgtStats.min,
+        max: wbgtStats.max,
+        p10: wbgtStats.p10,
+        p90: wbgtStats.p90,
+        members: wbgtValues,
+      })
+
+      // Calculate ensemble stats for temperature
+      const tempStats = calculateEnsembleStats(tempValues)
+      tempEnsemble.push({
+        time,
+        mean: tempStats.mean,
+        stdDev: tempStats.stdDev,
+        min: tempStats.min,
+        max: tempStats.max,
+        p10: tempStats.p10,
+        p90: tempStats.p90,
+        members: tempValues,
+      })
+
+      // Calculate ensemble mean for display
+      const wbgt = wbgtStats.mean
+      const temperature = tempStats.mean
       const humidity = humidityValues.reduce((a, b) => a + b, 0) / humidityValues.length
+
+      // Calculate dew point using Magnus formula approximation
+      const a = 17.27
+      const b = 237.7
+      const alpha = (a * temperature) / (b + temperature) + Math.log(humidity / 100)
+      const dewPoint = (b * alpha) / (a - alpha)
 
       return {
         wbgt,
@@ -129,13 +166,25 @@ export default function NowPage() {
         timestamp: time,
         localTimestamp: time,
         // Use first model's other values as defaults
-        wind_speed: refModel.windSpeed[idx],
+        wind_speed_ms: refModel.windSpeed[idx],
         solar_radiation: refModel.solarRadiation[idx],
         uv_index: refModel.uvIndex[idx],
+        dew_point: dewPoint,
+        cloud_cover: refModel.cloudCover[idx],
+        esi: 0, // ESI not calculated for forecast
+        apparent_temp: refModel.apparentTemp[idx],
+        rain_chance: 0, // Rain chance not available from models
       } as WeatherForecast
     })
 
-    return forecastData
+    return {
+      forecast: forecastData,
+      ensembleData: {
+        wbgt: wbgtEnsemble,
+        temperature: tempEnsemble,
+      },
+      activeModels: modelIds,
+    }
   }, [modelResults])
 
   // Get the most recent observation for current conditions
@@ -156,14 +205,37 @@ export default function NowPage() {
         return dateB.getTime() - dateA.getTime()
       })
       currentData = sorted[0]
-      console.log("[v0] Most recent observation:", currentData)
     }
   }
 
-  console.log("[v0] Normalized forecast array:", forecast)
+  // Derive current conditions from forecast if observations API fails
+  // This uses the first forecast point as "current" conditions
+  const derivedCurrentData: WeatherObservation | null = forecast.length > 0 ? (() => {
+    const f = forecast[0]
+    return {
+      wbgt: f.wbgt,
+      temperature: f.temperature,
+      humidity: f.humidity,
+      wind_speed_ms: f.wind_speed_ms,
+      solar_radiation: f.solar_radiation,
+      uv_index: f.uv_index,
+      timestamp: f.timestamp || f.localTimestamp || '',
+      localTimestamp: f.localTimestamp,
+      dew_point: f.dew_point,
+      cloud_cover: f.cloud_cover,
+      esi: f.esi,
+      apparent_temp: f.apparent_temp,
+      rain_chance: f.rain_chance,
+    } as WeatherObservation
+  })() : null
 
-  const isLoading = !observationsData || modelsLoading
-  const hasError = observationsError || modelError
+  // Use observations data if available, otherwise fall back to derived data
+  const displayCurrentData = currentData || derivedCurrentData
+
+  // Show loading if models are loading OR if we haven't received data yet
+  // modelsLoading is true when SWR is fetching, but we also need to handle the initial undefined state
+  const isLoading = modelsLoading || (!modelResults && !modelError)
+  const hasError = modelError
 
   return (
     <PageContainer title="Now" description="Current conditions and 6-hour forecast with running recommendations">
@@ -179,7 +251,7 @@ export default function NowPage() {
         </div>
       )}
 
-      {!isLoading && !hasError && currentData && forecast.length > 0 && (
+      {!isLoading && !hasError && displayCurrentData && forecast.length > 0 && (
         <div className="space-y-6">
           {/* Model Selector */}
           <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -214,22 +286,30 @@ export default function NowPage() {
 
           <WBGTDisplay
             data={{
-              wbgt: currentData.wbgt,
-              localTimestamp: currentData.timestamp || currentData.localTimestamp,
+              wbgt: displayCurrentData.wbgt,
+              localTimestamp: displayCurrentData.timestamp || displayCurrentData.localTimestamp,
             }}
           />
-          <SafetyRecommendations wbgt={currentData.wbgt} esi={currentData.esi} />
-          <CurrentConditions data={currentData} />
-          <ForecastChart data={forecast.slice(0, 6)} />
+          <SafetyRecommendations wbgt={displayCurrentData.wbgt} esi={displayCurrentData.esi} />
+          <CurrentConditions data={displayCurrentData} />
+          <ForecastChart
+            data={forecast.slice(0, 6)}
+            ensembleData={ensembleData ? {
+              wbgt: ensembleData.wbgt.slice(0, 6),
+              temperature: ensembleData.temperature.slice(0, 6),
+            } : undefined}
+            models={activeModels}
+            showUncertainty={showEnsemble}
+          />
           <EnvironmentalMetrics
-            uvIndex={currentData.uv_index}
-            airQuality={currentData.air_quality}
+            uvIndex={displayCurrentData.uv_index}
+            airQuality={displayCurrentData.air_quality}
             forecastData={forecast.slice(0, 6)}
           />
         </div>
       )}
 
-      {!isLoading && !hasError && (!currentData || forecast.length === 0) && (
+      {!isLoading && !hasError && (!displayCurrentData || forecast.length === 0) && (
         <div className="rounded-lg border border-muted bg-muted/10 p-4 text-muted-foreground">
           No weather data available at this time.
         </div>

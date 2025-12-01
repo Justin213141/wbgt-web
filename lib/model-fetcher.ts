@@ -26,6 +26,7 @@ export interface NormalizedWeatherData {
   uvIndex: number[]
   dewPoint: number[]
   apparentTemp: number[]
+  cloudCover: number[]
 }
 
 export interface ModelFetchResult {
@@ -48,6 +49,7 @@ export interface OpenMeteoResponse {
     wind_speed_10m: number[]
     shortwave_radiation: number[]
     uv_index: number[]
+    cloud_cover: number[]
   }
 }
 
@@ -61,6 +63,7 @@ export interface BomProxyResponse {
     uv_index: number[]
     dew_point_2m?: number[]
     apparent_temperature?: number[]
+    cloud_cover?: number[]
   }
 }
 
@@ -241,7 +244,8 @@ function buildOpenMeteoUrl(modelName: ModelName, lat: number, lon: number): stri
       'apparent_temperature',
       'wind_speed_10m',
       'shortwave_radiation',
-      'uv_index'
+      'uv_index',
+      'cloud_cover'
     ].join(','),
     timezone: 'auto'
   })
@@ -285,7 +289,8 @@ export function normalizeModelData(modelName: ModelName, rawData: OpenMeteoRespo
     solarRadiation: hourly.shortwave_radiation || new Array(length).fill(NaN),
     uvIndex: hourly.uv_index || new Array(length).fill(NaN),
     dewPoint: hourly.dew_point_2m || new Array(length).fill(NaN),
-    apparentTemp: hourly.apparent_temperature || new Array(length).fill(NaN)
+    apparentTemp: hourly.apparent_temperature || new Array(length).fill(NaN),
+    cloudCover: hourly.cloud_cover || new Array(length).fill(NaN)
   }
 }
 

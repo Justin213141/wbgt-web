@@ -1,6 +1,6 @@
 export interface WeatherObservation {
   timestamp: string // ISO 8601 format: YYYY-MM-DDTHH:mm:ss
-  localTimestamp?: string // ISO 8601 format: YYYY-MM-DDTHH:mm:ss (alternative field)
+  localTimestamp: string // ISO 8601 format: YYYY-MM-DDTHH:mm:ss
   temperature: number // Celsius
   humidity: number // percentage
   dew_point: number // Celsius
@@ -51,6 +51,7 @@ export interface NormalizedWeatherData {
   uvIndex: number[]
   dewPoint: number[]
   apparentTemp: number[]
+  cloudCover: number[]
 }
 
 // Result from fetching a single model
