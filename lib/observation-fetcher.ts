@@ -535,10 +535,27 @@ export async function fetchObservationsWithFallback(
   }
 
   // Build solar radiation lookup map
+  // Normalize timestamps to handle format differences:
+  // - BOM uses: "2025-12-03T10:00:00" (with seconds)
+  // - Satellite uses: "2025-12-03T10:00" (without seconds)
   const solarMap = new Map<string, SolarRadiationValues>()
   if (solarData?.hourly?.time && solarSource) {
     solarData.hourly.time.forEach((time, i) => {
-      solarMap.set(time, extractSolarRadiation(solarData!, solarSource!, i))
+      const values = extractSolarRadiation(solarData!, solarSource!, i)
+
+      // Store original format
+      solarMap.set(time, values)
+
+      // Normalize: if time is HH:MM format, also store with :00 seconds
+      // e.g., "2025-12-03T10:00" -> also store as "2025-12-03T10:00:00"
+      const timePart = time.split('T')[1] || ''
+      if (timePart.length === 5) {
+        // Format is HH:MM, add seconds
+        solarMap.set(`${time}:00`, values)
+      } else if (timePart.length === 8) {
+        // Format is HH:MM:SS, also store without seconds
+        solarMap.set(time.slice(0, -3), values)
+      }
     })
   }
 
@@ -628,11 +645,24 @@ export async function fetchHistoricalObservations(
     throw new Error('Failed to fetch historical weather data')
   }
 
-  // Build solar map
+  // Build solar map with timestamp normalization for format compatibility
   const solarMap = new Map<string, SolarRadiationValues>()
   if (solarData.data?.hourly?.time && solarData.source) {
     solarData.data.hourly.time.forEach((time: string, i: number) => {
-      solarMap.set(time, extractSolarRadiation(solarData.data!, solarData.source!, i))
+      const values = extractSolarRadiation(solarData.data!, solarData.source!, i)
+
+      // Store original format
+      solarMap.set(time, values)
+
+      // Normalize: handle format differences between APIs
+      const timePart = time.split('T')[1] || ''
+      if (timePart.length === 5) {
+        // Format is HH:MM, also store with :00 seconds
+        solarMap.set(`${time}:00`, values)
+      } else if (timePart.length === 8) {
+        // Format is HH:MM:SS, also store without seconds
+        solarMap.set(time.slice(0, -3), values)
+      }
     })
   }
 
