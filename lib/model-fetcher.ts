@@ -305,17 +305,16 @@ async function fetchSupplementalData(lat: number, lon: number): Promise<Suppleme
 
 /**
  * Convert timestamp to epoch milliseconds for comparison
- * Handles both BOM (ISO with Z suffix, UTC) and Open-Meteo (no timezone, local Sydney time)
+ * All timestamps are now UTC (BOM has Z suffix, Open-Meteo uses timezone=GMT)
  */
 function timestampToEpoch(timestamp: string): number {
-  // If timestamp has Z suffix, it's UTC - parse directly
+  // If timestamp has Z suffix, it's already UTC
   if (timestamp.endsWith('Z')) {
     return new Date(timestamp).getTime()
   }
-  // OpenMeteo times are local Sydney time (AEDT = UTC+11 or AEST = UTC+10)
-  // Append timezone offset to parse correctly
-  // Using +11:00 for AEDT (summer time)
-  return new Date(timestamp + ':00+11:00').getTime()
+  // Open-Meteo with timezone=GMT returns UTC times without Z suffix
+  // Append Z to parse as UTC
+  return new Date(timestamp + 'Z').getTime()
 }
 
 /**
