@@ -9,17 +9,26 @@ interface HourlyForecastTableProps {
   data: WeatherForecast[]
   title?: string
   intervalHours?: number
+  wbgtRange?: { min: number; max: number }[] | null
+  multiModelEnabled?: boolean
 }
 
 export function HourlyForecastTable({
   data,
   title = "Detailed Forecast",
-  intervalHours = 1
+  intervalHours = 1,
+  wbgtRange,
+  multiModelEnabled
 }: HourlyForecastTableProps) {
   // Filter data to show only every N hours if interval > 1
   const filteredData = intervalHours > 1
     ? data.filter((_, index) => index % intervalHours === 0)
     : data
+
+  // Filter wbgtRange to match the filtered data
+  const filteredRange = wbgtRange && intervalHours > 1
+    ? wbgtRange.filter((_, index) => index % intervalHours === 0)
+    : wbgtRange
 
   const formatTime = (timestamp: string) => {
     const date = parseApiDate(timestamp)
@@ -29,6 +38,23 @@ export function HourlyForecastTable({
   const formatDate = (timestamp: string) => {
     const date = parseApiDate(timestamp)
     return date.toLocaleDateString("en-AU", { weekday: "short", day: "numeric" })
+  }
+
+  // Format WBGT with range if multimodel is enabled
+  const formatWbgtValue = (wbgt: number, index: number) => {
+    const mainValue = (wbgt ?? 0).toFixed(0)
+    if (multiModelEnabled && filteredRange && filteredRange[index]) {
+      const range = filteredRange[index]
+      const rangeMin = range.min.toFixed(0)
+      const rangeMax = range.max.toFixed(0)
+      return (
+        <span>
+          {mainValue}°
+          <span className="text-[10px] ml-0.5 opacity-60">({rangeMin}-{rangeMax})</span>
+        </span>
+      )
+    }
+    return <span>{mainValue}°</span>
   }
 
   // Track date changes to show date headers
@@ -76,7 +102,7 @@ export function HourlyForecastTable({
                     <td className="p-2">
                       <div className="flex items-center gap-1">
                         <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: zoneColor }} />
-                        <span className="font-medium text-xs">{(hour.wbgt ?? 0).toFixed(0)}°</span>
+                        <span className="font-medium text-xs">{formatWbgtValue(hour.wbgt ?? 0, index)}</span>
                       </div>
                     </td>
                     <td className="p-2 text-xs">{(hour.temperature ?? 0).toFixed(0)}°</td>

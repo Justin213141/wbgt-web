@@ -29,7 +29,7 @@ export interface WBGTZoneInfo {
 }
 
 // Weather model identifiers
-export type WeatherModelId = 'ecmwf_ifs' | 'icon_seamless' | 'jma_seamless' | 'ukmo_seamless' | 'bom_access'
+export type WeatherModelId = 'ecmwf_ifs' | 'gfs_seamless' | 'bom_access'
 
 // Model metadata
 export interface WeatherModelInfo {
@@ -107,26 +107,12 @@ export const WEATHER_MODELS: Record<WeatherModelId, WeatherModelInfo> = {
     color: '#ef4444',
     description: 'European global model'
   },
-  icon_seamless: {
-    id: 'icon_seamless',
-    name: 'ICON',
-    source: 'DWD Germany',
+  gfs_seamless: {
+    id: 'gfs_seamless',
+    name: 'GFS',
+    source: 'NOAA/NCEP',
     color: '#3b82f6',
-    description: 'German weather service model'
-  },
-  jma_seamless: {
-    id: 'jma_seamless',
-    name: 'JMA',
-    source: 'Japan Met Agency',
-    color: '#22c55e',
-    description: 'Japanese global model'
-  },
-  ukmo_seamless: {
-    id: 'ukmo_seamless',
-    name: 'UK Met Office',
-    source: 'UKMO',
-    color: '#8b5cf6',
-    description: 'UK Met Office model'
+    description: 'US global model'
   },
   bom_access: {
     id: 'bom_access',

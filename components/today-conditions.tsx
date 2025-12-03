@@ -26,9 +26,11 @@ interface TodayConditionsProps {
     rainChance: number
     description?: string
   }
+  wbgtRange?: { min: number; max: number } | null
+  multiModelEnabled?: boolean
 }
 
-export function TodayConditions({ data, forecastSummary }: TodayConditionsProps) {
+export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEnabled }: TodayConditionsProps) {
   const wbgtValue = data.wbgt ?? 0
   const zone = getWBGTZone(wbgtValue)
   const zoneColors = getWBGTZoneColor(zone)
@@ -67,6 +69,24 @@ export function TodayConditions({ data, forecastSummary }: TodayConditionsProps)
     return "Unhealthy"
   }
 
+  // Format WBGT with range if multimodel is enabled
+  const formatWbgt = () => {
+    const mainValue = wbgtValue.toFixed(1)
+    if (multiModelEnabled && wbgtRange) {
+      const rangeMin = wbgtRange.min.toFixed(1)
+      const rangeMax = wbgtRange.max.toFixed(1)
+      return (
+        <span>
+          {mainValue}°
+          <span className="text-2xl ml-1 opacity-60">
+            ({rangeMin}-{rangeMax})
+          </span>
+        </span>
+      )
+    }
+    return <span>{mainValue}°</span>
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="grid md:grid-cols-2 gap-0">
@@ -90,9 +110,11 @@ export function TodayConditions({ data, forecastSummary }: TodayConditionsProps)
               className="text-6xl font-bold tracking-tight"
               style={{ color: zoneColors?.text || '#374151' }}
             >
-              {wbgtValue.toFixed(1)}°
+              {formatWbgt()}
             </div>
-            <div className="text-sm font-medium text-gray-600">WBGT</div>
+            <div className="text-sm font-medium text-gray-600">
+              WBGT{multiModelEnabled && <span className="text-xs ml-1">(multi-model)</span>}
+            </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-gray-500">→</span>
               <span className="text-lg font-semibold text-gray-700">

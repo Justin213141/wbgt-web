@@ -21,18 +21,22 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 // Map model IDs from ModelSelector to ModelFetcher format
 const MODEL_ID_MAP: Record<string, ModelName> = {
   'ecmwf': 'ecmwf_ifs',
-  'icon': 'icon_seamless',
-  'jma': 'jma_seamless',
-  'ukmo': 'ukmo_seamless',
+  'gfs': 'gfs_seamless',
   'bom': 'bom_access',
 }
 
+// Models to use when multimodel is enabled
+const MULTIMODEL_IDS = ['bom', 'gfs', 'ecmwf']
+const SINGLE_MODEL_IDS = ['bom']
+
 export default function TodayPage() {
-  // Model selection state - default to BOM only
-  const [enabledModels, setEnabledModels] = useState<string[]>(['bom'])
-  const [showEnsemble, setShowEnsemble] = useState(true)
+  // Multimodel toggle state - default to false (BOM only)
+  const [multiModelEnabled, setMultiModelEnabled] = useState(false)
   const [modelStatus, setModelStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Determine which models to fetch based on toggle
+  const enabledModels = multiModelEnabled ? MULTIMODEL_IDS : SINGLE_MODEL_IDS
 
   // Fetch observations for current conditions (most recent actual data)
   const { data: observationsData } = useSWR<any>("observations", fetchObservations, {
@@ -41,7 +45,7 @@ export default function TodayPage() {
 
   // Fetch multi-model forecast data
   const { data: modelResults, error: modelError, isLoading: modelsLoading } = useSWR(
-    enabledModels.length > 0 ? ['multi-model-forecast', enabledModels] : null,
+    ['multi-model-forecast', enabledModels],
     async () => {
       const modelNames = enabledModels.map(id => MODEL_ID_MAP[id]).filter(Boolean) as ModelName[]
 
@@ -73,13 +77,14 @@ export default function TodayPage() {
     }
   )
 
-  // Calculate WBGT from multi-model data with ensemble statistics
+  // Calculate WBGT from multi-model data
+  // When multimodel is enabled: average input variables, then calculate WBGT
   // Extended to 12 hours for the hourly strip
-  const { forecast, ensembleData, activeModels, forecastSummary } = useMemo(() => {
-    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null }
+  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null }
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null }
 
     // Get model IDs for legend display
     const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
@@ -92,88 +97,144 @@ export default function TodayPage() {
     const maxHours = 12
     const limitedTimes = times.slice(0, maxHours)
 
-    // Arrays to collect all values for ensemble stats
-    const wbgtEnsemble: EnsembleDataPoint[] = []
-    const tempEnsemble: EnsembleDataPoint[] = []
+    // Arrays to collect WBGT range data when multimodel
+    const wbgtRangeData: { min: number; max: number }[] = []
 
-    // Calculate WBGT for each model at each time
+    // Calculate forecast data
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
-      // Calculate WBGT for each model
-      const wbgtValues: number[] = []
-      const tempValues: number[] = []
-      const humidityValues: number[] = []
+      if (multiModelEnabled && successfulModels.length > 1) {
+        // MULTIMODEL: Average input variables, then calculate WBGT
+        const tempValues: number[] = []
+        const humidityValues: number[] = []
+        const windSpeedValues: number[] = []
+        const solarRadValues: number[] = []
+        const uvIndexValues: number[] = []
+        const cloudCoverValues: number[] = []
+        const apparentTempValues: number[] = []
 
-      successfulModels.forEach(model => {
-        if (idx < model.times.length) {
-          const params: WBGTParams = {
-            temperature: model.temperature[idx],
-            relativeHumidity: model.humidity[idx],
-            windSpeed: model.windSpeed[idx],
-            solarRadiation: model.solarRadiation[idx],
-            latitude: -33.87,
-            longitude: 151.21,
-            timestamp: new Date(time),
+        successfulModels.forEach(model => {
+          if (idx < model.times.length) {
+            tempValues.push(model.temperature[idx])
+            humidityValues.push(model.humidity[idx])
+            windSpeedValues.push(model.windSpeed[idx])
+            solarRadValues.push(model.solarRadiation[idx])
+            uvIndexValues.push(model.uvIndex[idx])
+            cloudCoverValues.push(model.cloudCover[idx])
+            apparentTempValues.push(model.apparentTemp[idx])
           }
+        })
 
-          const result = calculateKongWBGT(params)
-          wbgtValues.push(result.wbgt)
-          tempValues.push(model.temperature[idx])
-          humidityValues.push(model.humidity[idx])
+        // Helper to calculate average, filtering out NaN values
+        const safeAvg = (arr: number[]) => {
+          const valid = arr.filter(v => !isNaN(v) && v !== null && v !== undefined)
+          return valid.length > 0 ? valid.reduce((a, b) => a + b, 0) / valid.length : NaN
         }
-      })
 
-      // Calculate ensemble stats for WBGT
-      const wbgtStats = calculateEnsembleStats(wbgtValues)
-      wbgtEnsemble.push({
-        time,
-        mean: wbgtStats.mean,
-        stdDev: wbgtStats.stdDev,
-        min: wbgtStats.min,
-        max: wbgtStats.max,
-        p10: wbgtStats.p10,
-        p90: wbgtStats.p90,
-        members: wbgtValues,
-      })
+        // Calculate averages (filtering out NaN values)
+        const avgTemp = safeAvg(tempValues)
+        const avgHumidity = safeAvg(humidityValues)
+        const avgWindSpeed = safeAvg(windSpeedValues)
+        const avgSolarRad = safeAvg(solarRadValues)
+        const avgUvIndex = safeAvg(uvIndexValues)
+        const avgCloudCover = safeAvg(cloudCoverValues)
+        const avgApparentTemp = safeAvg(apparentTempValues)
 
-      // Calculate ensemble stats for temperature
-      const tempStats = calculateEnsembleStats(tempValues)
-      tempEnsemble.push({
-        time,
-        mean: tempStats.mean,
-        stdDev: tempStats.stdDev,
-        min: tempStats.min,
-        max: tempStats.max,
-        p10: tempStats.p10,
-        p90: tempStats.p90,
-        members: tempValues,
-      })
+        // Calculate WBGT from averaged inputs
+        const params: WBGTParams = {
+          temperature: avgTemp,
+          relativeHumidity: avgHumidity,
+          windSpeed: avgWindSpeed,
+          solarRadiation: avgSolarRad,
+          latitude: -33.87,
+          longitude: 151.21,
+          timestamp: new Date(time),
+        }
+        const wbgtResult = calculateKongWBGT(params)
+        const wbgt = wbgtResult.wbgt
 
-      // Calculate ensemble mean for display
-      const wbgt = wbgtStats.mean
-      const temperature = tempStats.mean
-      const humidity = humidityValues.reduce((a, b) => a + b, 0) / humidityValues.length
+        // Also calculate WBGT for each model to get range
+        const modelWbgts: number[] = []
+        successfulModels.forEach(model => {
+          if (idx < model.times.length) {
+            const modelParams: WBGTParams = {
+              temperature: model.temperature[idx],
+              relativeHumidity: model.humidity[idx],
+              windSpeed: model.windSpeed[idx],
+              solarRadiation: model.solarRadiation[idx],
+              latitude: -33.87,
+              longitude: 151.21,
+              timestamp: new Date(time),
+            }
+            const modelResult = calculateKongWBGT(modelParams)
+            if (!isNaN(modelResult.wbgt)) {
+              modelWbgts.push(modelResult.wbgt)
+            }
+          }
+        })
 
-      // Calculate dew point using Magnus formula approximation
-      const a = 17.27
-      const b = 237.7
-      const alpha = (a * temperature) / (b + temperature) + Math.log(humidity / 100)
-      const dewPoint = (b * alpha) / (a - alpha)
+        // Store range for display
+        wbgtRangeData.push({
+          min: modelWbgts.length > 0 ? Math.min(...modelWbgts) : wbgt,
+          max: modelWbgts.length > 0 ? Math.max(...modelWbgts) : wbgt,
+        })
 
-      return {
-        wbgt,
-        temperature,
-        humidity,
-        timestamp: time,
-        localTimestamp: time,
-        wind_speed_ms: refModel.windSpeed[idx],
-        solar_radiation: refModel.solarRadiation[idx],
-        uv_index: refModel.uvIndex[idx],
-        dew_point: dewPoint,
-        cloud_cover: refModel.cloudCover[idx],
-        esi: 0,
-        apparent_temp: refModel.apparentTemp[idx],
-        rain_chance: 0, // Precipitation probability not available from model data
-      } as WeatherForecast
+        // Calculate dew point using Magnus formula approximation
+        const a = 17.27
+        const b = 237.7
+        const alpha = (a * avgTemp) / (b + avgTemp) + Math.log(avgHumidity / 100)
+        const dewPoint = (b * alpha) / (a - alpha)
+
+        return {
+          wbgt,
+          temperature: avgTemp,
+          humidity: avgHumidity,
+          timestamp: time,
+          localTimestamp: time,
+          wind_speed_ms: avgWindSpeed,
+          solar_radiation: avgSolarRad,
+          uv_index: avgUvIndex,
+          dew_point: dewPoint,
+          cloud_cover: avgCloudCover,
+          esi: 0,
+          apparent_temp: avgApparentTemp,
+          rain_chance: 0,
+        } as WeatherForecast
+      } else {
+        // SINGLE MODEL (BOM): Use values directly
+        const model = successfulModels[0]
+        const params: WBGTParams = {
+          temperature: model.temperature[idx],
+          relativeHumidity: model.humidity[idx],
+          windSpeed: model.windSpeed[idx],
+          solarRadiation: model.solarRadiation[idx],
+          latitude: -33.87,
+          longitude: 151.21,
+          timestamp: new Date(time),
+        }
+        const wbgtResult = calculateKongWBGT(params)
+
+        // Calculate dew point
+        const a = 17.27
+        const b = 237.7
+        const alpha = (a * model.temperature[idx]) / (b + model.temperature[idx]) + Math.log(model.humidity[idx] / 100)
+        const dewPoint = (b * alpha) / (a - alpha)
+
+        return {
+          wbgt: wbgtResult.wbgt,
+          temperature: model.temperature[idx],
+          humidity: model.humidity[idx],
+          timestamp: time,
+          localTimestamp: time,
+          wind_speed_ms: model.windSpeed[idx],
+          solar_radiation: model.solarRadiation[idx],
+          uv_index: model.uvIndex[idx],
+          dew_point: dewPoint,
+          cloud_cover: model.cloudCover[idx],
+          esi: 0,
+          apparent_temp: model.apparentTemp[idx],
+          rain_chance: 0,
+        } as WeatherForecast
+      }
     })
 
     // Calculate forecast summary for TodayConditions
@@ -190,14 +251,12 @@ export default function TodayPage() {
 
     return {
       forecast: forecastData,
-      ensembleData: {
-        wbgt: wbgtEnsemble,
-        temperature: tempEnsemble,
-      },
+      ensembleData: null, // We don't need ensemble data for charts anymore
       activeModels: modelIds,
       forecastSummary: summary,
+      wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
     }
-  }, [modelResults])
+  }, [modelResults, multiModelEnabled])
 
   // Get the most recent observation for current conditions
   let currentData: WeatherObservation | null = null
@@ -249,6 +308,9 @@ export default function TodayPage() {
   const hasError = modelError
   const hasValidData = displayCurrentData && 'wbgt' in displayCurrentData && displayCurrentData.wbgt !== undefined
 
+  // Get current WBGT range for display
+  const currentWbgtRange = wbgtRange && wbgtRange.length > 0 ? wbgtRange[0] : null
+
   return (
     <PageContainer title="Today" description="Current conditions and 12-hour forecast">
       {hasError && (
@@ -269,20 +331,23 @@ export default function TodayPage() {
           <TodayConditions
             data={displayCurrentData}
             forecastSummary={forecastSummary || undefined}
+            wbgtRange={currentWbgtRange}
+            multiModelEnabled={multiModelEnabled}
           />
 
           {/* 12-Hour Hourly Strip */}
-          <HourlyStrip data={forecast} maxHours={12} />
+          <HourlyStrip
+            data={forecast}
+            maxHours={12}
+            wbgtRange={wbgtRange}
+            multiModelEnabled={multiModelEnabled}
+          />
 
           {/* Forecast Chart - 6 hours */}
           <ForecastChart
             data={forecast.slice(0, 6)}
-            ensembleData={ensembleData ? {
-              wbgt: ensembleData.wbgt.slice(0, 6),
-              temperature: ensembleData.temperature.slice(0, 6),
-            } : undefined}
             models={activeModels}
-            showUncertainty={showEnsemble}
+            showUncertainty={false}
           />
 
           {/* Environmental Metrics - lower priority */}
@@ -301,7 +366,7 @@ export default function TodayPage() {
                     <Settings className="h-4 w-4" />
                     Forecast Models
                     <span className="text-xs text-muted-foreground font-normal">
-                      ({enabledModels.length} selected)
+                      ({multiModelEnabled ? '3 models' : 'BOM only'})
                     </span>
                   </CardTitle>
                   <div className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
@@ -312,11 +377,9 @@ export default function TodayPage() {
               <CollapsibleContent>
                 <CardContent>
                   <ModelSelector
-                    enabledModels={enabledModels}
-                    onModelsChange={setEnabledModels}
+                    multiModelEnabled={multiModelEnabled}
+                    onMultiModelChange={setMultiModelEnabled}
                     modelStatus={modelStatus}
-                    showEnsemble={showEnsemble}
-                    onEnsembleChange={setShowEnsemble}
                   />
                 </CardContent>
               </CollapsibleContent>

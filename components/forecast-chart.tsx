@@ -5,9 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceArea, Area, ComposedChart } from "recharts"
 import { Button } from "./ui/button"
 import { parseApiDate } from "@/lib/utils"
-import { ConfidenceBadgeFromLevel } from "./confidence-badge"
-import { ModelLegend } from "./model-legend"
-import { getOverallConfidence, type EnsembleDataPoint } from "@/lib/ensemble-utils"
 import type { WeatherModelId } from "@/lib/types"
 
 interface ForecastData {
@@ -20,19 +17,13 @@ interface ForecastData {
   rain_chance: number
 }
 
-interface EnsembleData {
-  wbgt: EnsembleDataPoint[]
-  temperature: EnsembleDataPoint[]
-}
-
 interface ForecastChartProps {
   data: ForecastData[]
-  ensembleData?: EnsembleData
   models?: WeatherModelId[]
   showUncertainty?: boolean
 }
 
-export function ForecastChart({ data, ensembleData, models = [], showUncertainty = true }: ForecastChartProps) {
+export function ForecastChart({ data, models = [], showUncertainty = false }: ForecastChartProps) {
   const [visibleLines, setVisibleLines] = useState({
     wbgt: true,
     temperature: true,
@@ -41,17 +32,14 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
     wind_speed_ms: false,
     rain_chance: false,
   })
-  const [showBands, setShowBands] = useState(showUncertainty)
 
   const toggleLine = (key: keyof typeof visibleLines) => {
     setVisibleLines((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  // Merge forecast data with ensemble uncertainty data
-  const chartData = data.map((item, idx) => {
+  // Build chart data
+  const chartData = data.map((item) => {
     const time = parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    const wbgtEnsemble = ensembleData?.wbgt?.[idx]
-    const tempEnsemble = ensembleData?.temperature?.[idx]
 
     return {
       time,
@@ -61,21 +49,8 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
       solar_radiation: item.solar_radiation,
       wind_speed_ms: item.wind_speed_ms,
       rain_chance: item.rain_chance,
-      // WBGT uncertainty bands
-      wbgtUpper: wbgtEnsemble ? wbgtEnsemble.mean + wbgtEnsemble.stdDev : undefined,
-      wbgtLower: wbgtEnsemble ? wbgtEnsemble.mean - wbgtEnsemble.stdDev : undefined,
-      wbgtMin: wbgtEnsemble?.min,
-      wbgtMax: wbgtEnsemble?.max,
-      // Temperature uncertainty bands
-      tempUpper: tempEnsemble ? tempEnsemble.mean + tempEnsemble.stdDev : undefined,
-      tempLower: tempEnsemble ? tempEnsemble.mean - tempEnsemble.stdDev : undefined,
-      tempMin: tempEnsemble?.min,
-      tempMax: tempEnsemble?.max,
     }
   })
-
-  // Calculate overall confidence for WBGT if ensemble data exists
-  const wbgtConfidence = ensembleData?.wbgt ? getOverallConfidence(ensembleData.wbgt) : null
 
   const temperatureMetrics = [
     { key: "wbgt", label: "WBGT", color: "#ef4444", unit: "°C", yAxisId: "temp" },
@@ -83,8 +58,8 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
   ]
 
   const percentageMetrics = [
-    { key: "humidity", label: "Humidity", color: "#3b82f6", unit: "%", yAxisId: "percent" }, // Blue
-    { key: "rain_chance", label: "Rain Chance", color: "#8b5cf6", unit: "%", yAxisId: "percent" }, // Purple
+    { key: "humidity", label: "Humidity", color: "#3b82f6", unit: "%", yAxisId: "percent" },
+    { key: "rain_chance", label: "Rain Chance", color: "#8b5cf6", unit: "%", yAxisId: "percent" },
   ]
 
   const solarMetrics = [
@@ -92,25 +67,17 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
   ]
 
   const windMetrics = [
-    { key: "wind_speed_ms", label: "Wind Speed", color: "#6b7280", unit: "m/s", yAxisId: "wind" }, // Grey
+    { key: "wind_speed_ms", label: "Wind Speed", color: "#6b7280", unit: "m/s", yAxisId: "wind" },
   ]
 
   const allMetrics = [...temperatureMetrics, ...percentageMetrics, ...solarMetrics, ...windMetrics]
-
-  const hasEnsembleData = ensembleData && ensembleData.wbgt.length > 0
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">6-Hour Forecast</CardTitle>
-          {wbgtConfidence && (
-            <ConfidenceBadgeFromLevel level={wbgtConfidence} />
-          )}
         </div>
-        {models.length > 0 && (
-          <ModelLegend models={models} className="mt-1" compact />
-        )}
         <div className="flex flex-wrap gap-2 mt-4">
           {allMetrics.map((metric) => (
             <Button
@@ -128,16 +95,6 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
               {metric.label}
             </Button>
           ))}
-          {hasEnsembleData && (
-            <Button
-              variant={showBands ? "default" : "outline"}
-              size="sm"
-              onClick={() => setShowBands(!showBands)}
-              className="text-xs ml-2"
-            >
-              {showBands ? "Hide" : "Show"} Uncertainty
-            </Button>
-          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -148,49 +105,48 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
           <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="time" stroke="#6b7280" style={{ fontSize: "12px" }} />
-            
+
             {/* Left Y-Axis - Temperature (Visible) */}
-            <YAxis 
-              yAxisId="temp" 
-              stroke="#f97316" 
+            <YAxis
+              yAxisId="temp"
+              stroke="#f97316"
               style={{ fontSize: "12px" }}
               label={{ value: 'Temperature (°C)', angle: -90, position: 'insideLeft' }}
               domain={[15, 35]}
             />
-            
+
             {/* Right Y-Axis - Percentage (Visible) */}
-            <YAxis 
-              yAxisId="percent" 
-              orientation="right" 
-              stroke="#3b82f6" 
+            <YAxis
+              yAxisId="percent"
+              orientation="right"
+              stroke="#3b82f6"
               style={{ fontSize: "12px" }}
               label={{ value: 'Percentage (%)', angle: 90, position: 'insideRight' }}
               domain={[0, 100]}
             />
-            
+
             {/* Hidden Y-Axis - Solar Radiation */}
-            <YAxis 
-              yAxisId="solar" 
-              orientation="right" 
+            <YAxis
+              yAxisId="solar"
+              orientation="right"
               hide={true}
               domain={[0, 1200]}
             />
-            
+
             {/* Hidden Y-Axis - Wind Speed */}
-            <YAxis 
-              yAxisId="wind" 
-              orientation="right" 
+            <YAxis
+              yAxisId="wind"
+              orientation="right"
               hide={true}
               domain={[0, 15]}
             />
-            
+
             {/* WBGT Performance Zones */}
-            {/* ReferenceArea for low performance impact (20-23) - Yellow */}
             <ReferenceArea yAxisId="temp" y1={20} y2={23} fill="#eab308" fillOpacity={0.1} />
             <ReferenceArea yAxisId="temp" y1={23} y2={26} fill="#f97316" fillOpacity={0.1} />
             <ReferenceArea yAxisId="temp" y1={26} y2={29} fill="#ef4444" fillOpacity={0.1} />
             <ReferenceArea yAxisId="temp" y1={29} y2={35} fill="#991b1b" fillOpacity={0.1} />
-            
+
             <Tooltip
               contentStyle={{
                 backgroundColor: "white",
@@ -247,81 +203,6 @@ export function ForecastChart({ data, ensembleData, models = [], showUncertainty
                 )
               }}
             />
-            {/* WBGT Uncertainty Bands - Min/Max range (lightest) */}
-            {visibleLines.wbgt && showBands && hasEnsembleData && (
-              <Area
-                yAxisId="temp"
-                type="monotone"
-                dataKey="wbgtMax"
-                stroke="none"
-                fill="#ef4444"
-                fillOpacity={0.1}
-                name="wbgtMax"
-                legendType="none"
-              />
-            )}
-            {visibleLines.wbgt && showBands && hasEnsembleData && (
-              <Area
-                yAxisId="temp"
-                type="monotone"
-                dataKey="wbgtMin"
-                stroke="none"
-                fill="white"
-                fillOpacity={1}
-                name="wbgtMin"
-                legendType="none"
-              />
-            )}
-            {/* WBGT Uncertainty Bands - ±1 Std Dev (medium) */}
-            {visibleLines.wbgt && showBands && hasEnsembleData && (
-              <Area
-                yAxisId="temp"
-                type="monotone"
-                dataKey="wbgtUpper"
-                stroke="none"
-                fill="#ef4444"
-                fillOpacity={0.2}
-                name="wbgtUpper"
-                legendType="none"
-              />
-            )}
-            {visibleLines.wbgt && showBands && hasEnsembleData && (
-              <Area
-                yAxisId="temp"
-                type="monotone"
-                dataKey="wbgtLower"
-                stroke="none"
-                fill="white"
-                fillOpacity={1}
-                name="wbgtLower"
-                legendType="none"
-              />
-            )}
-            {/* Temperature Uncertainty Bands - ±1 Std Dev */}
-            {visibleLines.temperature && showBands && hasEnsembleData && (
-              <Area
-                yAxisId="temp"
-                type="monotone"
-                dataKey="tempUpper"
-                stroke="none"
-                fill="#f97316"
-                fillOpacity={0.15}
-                name="tempUpper"
-                legendType="none"
-              />
-            )}
-            {visibleLines.temperature && showBands && hasEnsembleData && (
-              <Area
-                yAxisId="temp"
-                type="monotone"
-                dataKey="tempLower"
-                stroke="none"
-                fill="white"
-                fillOpacity={1}
-                name="tempLower"
-                legendType="none"
-              />
-            )}
             {/* Temperature lines - Left Y-Axis */}
             {visibleLines.wbgt && (
               <Line

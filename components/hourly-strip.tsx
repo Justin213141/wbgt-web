@@ -20,9 +20,11 @@ interface HourlyData {
 interface HourlyStripProps {
   data: HourlyData[]
   maxHours?: number
+  wbgtRange?: { min: number; max: number }[] | null
+  multiModelEnabled?: boolean
 }
 
-export function HourlyStrip({ data, maxHours = 12 }: HourlyStripProps) {
+export function HourlyStrip({ data, maxHours = 12, wbgtRange, multiModelEnabled }: HourlyStripProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const displayData = data.slice(0, maxHours)
 
@@ -72,6 +74,23 @@ export function HourlyStrip({ data, maxHours = 12 }: HourlyStripProps) {
     return date.toLocaleTimeString("en-AU", { hour: "numeric", hour12: true }).toUpperCase()
   }
 
+  // Format WBGT with range if multimodel is enabled
+  const formatWbgtValue = (wbgt: number, index: number) => {
+    const mainValue = (wbgt ?? 0).toFixed(0)
+    if (multiModelEnabled && wbgtRange && wbgtRange[index]) {
+      const range = wbgtRange[index]
+      const rangeMin = range.min.toFixed(0)
+      const rangeMax = range.max.toFixed(0)
+      return (
+        <div className="flex flex-col items-center leading-tight">
+          <span>{mainValue}°</span>
+          <span className="text-[9px] opacity-60">({rangeMin}-{rangeMax})</span>
+        </div>
+      )
+    }
+    return <span>{mainValue}°</span>
+  }
+
   const rowLabels = [
     { key: "icon", label: "" },
     { key: "temp", label: "°C" },
@@ -98,7 +117,7 @@ export function HourlyStrip({ data, maxHours = 12 }: HourlyStripProps) {
                 {rowLabels.map((row) => (
                   <div
                     key={row.key}
-                    className="h-7 flex items-center justify-center text-[10px] text-gray-400 font-medium"
+                    className={`flex items-center justify-center text-[10px] text-gray-400 font-medium ${row.key === 'wbgt' && multiModelEnabled ? 'h-10' : 'h-7'}`}
                   >
                     {row.label}
                   </div>
@@ -130,9 +149,9 @@ export function HourlyStrip({ data, maxHours = 12 }: HourlyStripProps) {
                       {(hour.temperature ?? 0).toFixed(0)}°
                     </div>
 
-                    {/* WBGT */}
-                    <div className={`h-7 flex items-center justify-center text-sm font-semibold ${getWbgtColor(hour.wbgt ?? 0)}`}>
-                      {(hour.wbgt ?? 0).toFixed(0)}°
+                    {/* WBGT - taller row when multimodel to fit range */}
+                    <div className={`flex items-center justify-center text-sm font-semibold ${getWbgtColor(hour.wbgt ?? 0)} ${multiModelEnabled ? 'h-10' : 'h-7'}`}>
+                      {formatWbgtValue(hour.wbgt, index)}
                     </div>
 
                     {/* Solar Radiation */}

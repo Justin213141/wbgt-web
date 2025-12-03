@@ -67,7 +67,7 @@ export interface BomProxyResponse {
   }
 }
 
-export type ModelName = 'ecmwf_ifs' | 'icon_seamless' | 'jma_seamless' | 'ukmo_seamless' | 'bom_access'
+export type ModelName = 'ecmwf_ifs' | 'gfs_seamless' | 'bom_access'
 
 export interface ModelConfig {
   name: ModelName
@@ -93,21 +93,9 @@ export const MODEL_CONFIGS: Record<ModelName, ModelConfig> = {
     endpoint: 'https://api.open-meteo.com/v1/forecast',
     requiresProxy: false
   },
-  icon_seamless: {
-    name: 'icon_seamless',
-    displayName: 'ICON Seamless',
-    endpoint: 'https://api.open-meteo.com/v1/forecast',
-    requiresProxy: false
-  },
-  jma_seamless: {
-    name: 'jma_seamless',
-    displayName: 'JMA Seamless',
-    endpoint: 'https://api.open-meteo.com/v1/forecast',
-    requiresProxy: false
-  },
-  ukmo_seamless: {
-    name: 'ukmo_seamless',
-    displayName: 'UKMO Seamless',
+  gfs_seamless: {
+    name: 'gfs_seamless',
+    displayName: 'GFS',
     endpoint: 'https://api.open-meteo.com/v1/forecast',
     requiresProxy: false
   },
@@ -247,7 +235,7 @@ function buildOpenMeteoUrl(modelName: ModelName, lat: number, lon: number): stri
       'uv_index',
       'cloud_cover'
     ].join(','),
-    timezone: 'auto'
+    timezone: 'GMT'
   })
 
   return `${MODEL_CONFIGS[modelName].endpoint}?${params.toString()}`
@@ -272,7 +260,7 @@ function buildSupplementalDataUrl(lat: number, lon: number): string {
     latitude: lat.toString(),
     longitude: lon.toString(),
     hourly: 'shortwave_radiation_instant,direct_radiation_instant,diffuse_radiation_instant,cloud_cover',
-    timezone: 'auto',
+    timezone: 'GMT',
     past_days: '3',
     forecast_days: '3'
   })
