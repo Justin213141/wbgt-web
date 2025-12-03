@@ -1,5 +1,9 @@
 # WBGT Web Project Notes
 
+## Current Focus
+- Today page: AQI in chart, color-coded metrics, 48h forecast, multimodel temp ranges
+- HourlyForecastTable: visual day separator at midnight boundaries
+
 ## Build & Deployment
 
 ### GitHub Pages Deployment
