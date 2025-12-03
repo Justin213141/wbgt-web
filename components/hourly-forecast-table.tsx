@@ -2,7 +2,15 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import type { WeatherForecast } from "@/lib/types"
-import { getWBGTZone } from "@/lib/weather-utils"
+import {
+  getWBGTZone,
+  getWbgtTextColor,
+  getTemperatureTextColor,
+  getSolarRadiationTextColor,
+  getDewPointTextColor,
+  getUvIndexTextColor,
+  getWindSpeedTextColor
+} from "@/lib/weather-utils"
 import { parseApiDate } from "@/lib/utils"
 
 interface HourlyForecastTableProps {
@@ -59,6 +67,7 @@ export function HourlyForecastTable({
 
   // Track date changes to show date headers
   let lastDate = ""
+  let lastHour = -1
 
   return (
     <Card>
@@ -88,11 +97,22 @@ export function HourlyForecastTable({
                   zone.level === 0 ? "#22c55e" : zone.level === 1 ? "#eab308" : zone.level === 2 ? "#f97316" : "#ef4444"
 
                 const currentDate = formatDate(hour.localTimestamp)
-                const showDate = currentDate !== lastDate
+                const parsedDate = parseApiDate(hour.localTimestamp)
+                const currentHour = parsedDate.getHours()
+
+                // Show date when: date changes OR at midnight (hour 0)
+                const dateChanged = currentDate !== lastDate
+                const isMidnight = currentHour === 0
+                const showDate = dateChanged || (isMidnight && index > 0)
+
+                // Add thick border at day boundary (when hour wraps from late to early)
+                const isDayBoundary = index > 0 && currentHour < lastHour
+
                 lastDate = currentDate
+                lastHour = currentHour
 
                 return (
-                  <tr key={index} className="border-b border-border/50 hover:bg-muted/30">
+                  <tr key={index} className={`border-b border-border/50 hover:bg-muted/30 ${isDayBoundary ? 'border-t-2 border-t-gray-300' : ''}`}>
                     <td className="p-2">
                       <div className="font-medium text-xs">
                         {showDate && <span className="text-muted-foreground mr-1">{currentDate}</span>}
@@ -102,16 +122,16 @@ export function HourlyForecastTable({
                     <td className="p-2">
                       <div className="flex items-center gap-1">
                         <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: zoneColor }} />
-                        <span className="font-medium text-xs">{formatWbgtValue(hour.wbgt ?? 0, index)}</span>
+                        <span className={`font-medium text-xs ${getWbgtTextColor(hour.wbgt ?? 0)}`}>{formatWbgtValue(hour.wbgt ?? 0, index)}</span>
                       </div>
                     </td>
-                    <td className="p-2 text-xs">{(hour.temperature ?? 0).toFixed(0)}°</td>
+                    <td className={`p-2 text-xs ${getTemperatureTextColor(hour.temperature ?? 0)}`}>{(hour.temperature ?? 0).toFixed(0)}°</td>
                     <td className="p-2 text-xs">{(hour.humidity ?? 0).toFixed(0)}%</td>
-                    <td className="p-2 text-xs">{hour.dew_point?.toFixed(0) ?? '-'}°</td>
-                    <td className="p-2 text-xs">{((hour.wind_speed_ms ?? 0) * 3.6).toFixed(0)}</td>
-                    <td className="p-2 text-xs">{hour.solar_radiation?.toFixed(0) ?? '-'}</td>
-                    <td className="p-2 text-xs">{hour.uv_index?.toFixed(0) ?? '-'}</td>
-                    <td className="p-2 text-xs">{(hour.rain_chance ?? 0).toFixed(0)}%</td>
+                    <td className={`p-2 text-xs ${getDewPointTextColor(hour.dew_point ?? 0)}`}>{hour.dew_point?.toFixed(0) ?? '-'}°</td>
+                    <td className={`p-2 text-xs ${getWindSpeedTextColor((hour.wind_speed_ms ?? 0) * 3.6)}`}>{((hour.wind_speed_ms ?? 0) * 3.6).toFixed(0)}</td>
+                    <td className={`p-2 text-xs ${getSolarRadiationTextColor(hour.solar_radiation ?? 0)}`}>{hour.solar_radiation?.toFixed(0) ?? '-'}</td>
+                    <td className={`p-2 text-xs ${getUvIndexTextColor(hour.uv_index ?? 0)}`}>{hour.uv_index?.toFixed(0) ?? '-'}</td>
+                    <td className="p-2 text-xs text-blue-600">{(hour.rain_chance ?? 0).toFixed(0)}%</td>
                   </tr>
                 )
               })}

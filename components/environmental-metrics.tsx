@@ -1,27 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
-import { Sun, BirdIcon as AirIcon } from "lucide-react"
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceArea, ReferenceLine } from "recharts"
+import { BirdIcon as AirIcon } from "lucide-react"
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts"
 import { parseApiDate } from "@/lib/utils"
 
 interface EnvironmentalMetricsProps {
-  uvIndex: number
   airQuality?: number
   forecastData: Array<{
     localTimestamp: string
-    uv_index: number
     air_quality?: number
   }>
 }
 
-export function EnvironmentalMetrics({ uvIndex, airQuality, forecastData }: EnvironmentalMetricsProps) {
-  const getUVLevel = (uv: number) => {
-    if (uv < 3) return { level: "Low", color: "#22c55e", bg: "#dcfce7" }
-    if (uv < 6) return { level: "Moderate", color: "#eab308", bg: "#fef9c3" }
-    if (uv < 8) return { level: "High", color: "#f97316", bg: "#fed7aa" }
-    if (uv < 11) return { level: "Very High", color: "#ef4444", bg: "#fecaca" }
-    return { level: "Extreme", color: "#991b1b", bg: "#fca5a5" }
-  }
-
+export function EnvironmentalMetrics({ airQuality, forecastData }: EnvironmentalMetricsProps) {
   const getAQILevel = (aqi: number) => {
     if (aqi <= 50) return { level: "Good", color: "#22c55e", bg: "#dcfce7" }
     if (aqi <= 100) return { level: "Moderate", color: "#eab308", bg: "#fef9c3" }
@@ -31,13 +21,7 @@ export function EnvironmentalMetrics({ uvIndex, airQuality, forecastData }: Envi
     return { level: "Hazardous", color: "#7f1d1d", bg: "#f87171" }
   }
 
-  const uvLevel = getUVLevel(uvIndex)
-  const aqiLevel = airQuality ? getAQILevel(airQuality) : null
-
-  const uvChartData = forecastData.map((item) => ({
-    time: parseApiDate(item.localTimestamp).toLocaleTimeString("en-US", { hour: "numeric" }),
-    uv: item.uv_index,
-  }))
+  const aqiLevel = airQuality !== undefined && airQuality !== null ? getAQILevel(airQuality) : null
 
   const aqiChartData = forecastData
     .filter((item) => item.air_quality !== undefined)
@@ -47,57 +31,7 @@ export function EnvironmentalMetrics({ uvIndex, airQuality, forecastData }: Envi
     }))
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      {/* UV Index */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Sun className="h-5 w-5 text-yellow-600" />
-            UV Index
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-6">
-            <div className="rounded-xl p-6 text-center" style={{ backgroundColor: uvLevel.bg }}>
-              <div className="text-5xl font-bold mb-2" style={{ color: uvLevel.color }}>
-                {uvIndex.toFixed(1)}
-              </div>
-              <div
-                className="inline-block rounded-full px-4 py-1 text-sm font-bold uppercase"
-                style={{ backgroundColor: uvLevel.color, color: "white" }}
-              >
-                {uvLevel.level}
-              </div>
-            </div>
-          </div>
-
-          <div className="h-32">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={uvChartData}>
-                <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: "10px" }} />
-                <YAxis stroke="#9ca3af" style={{ fontSize: "10px" }} />
-                
-                {/* UV Sunscreen Zone (>3) */}
-                <ReferenceArea y1={3} y2={15} fill="#eab308" fillOpacity={0.2} />
-
-                {/* UV=3 Reference Line */}
-                <ReferenceLine y={3} stroke="#eab308" strokeWidth={2} strokeDasharray="5 5" />
-
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Line type="monotone" dataKey="uv" stroke="#eab308" strokeWidth={2} dot={{ fill: "#eab308", r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div>
       {/* Air Quality */}
       <Card>
         <CardHeader>
@@ -107,12 +41,12 @@ export function EnvironmentalMetrics({ uvIndex, airQuality, forecastData }: Envi
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {airQuality && aqiLevel ? (
+          {aqiLevel ? (
             <>
               <div className="mb-6">
                 <div className="rounded-xl p-6 text-center" style={{ backgroundColor: aqiLevel.bg }}>
                   <div className="text-5xl font-bold mb-2" style={{ color: aqiLevel.color }}>
-                    {airQuality.toFixed(0)}
+                    {(airQuality ?? 0).toFixed(0)}
                   </div>
                   <div
                     className="inline-block rounded-full px-4 py-1 text-sm font-bold uppercase"

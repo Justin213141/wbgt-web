@@ -19,6 +19,8 @@ import {
   type ObservationData,
   type ObservationResult
 } from './observation-fetcher'
+import { fetchARPANSAUV } from './arpansa-uv'
+import { fetchAirQuality, getAQIForTimestamp, type AirQualityData } from './air-quality'
 
 // ============================================================================
 // API Endpoints
@@ -57,7 +59,18 @@ export async function fetchObservations(
   const lat = typeof latOrKey === 'number' ? latOrKey : DEFAULT_LOCATION.lat
   const longitude = typeof lon === 'number' ? lon : DEFAULT_LOCATION.lon
   try {
-    const result = await fetchObservationsWithFallback(lat, longitude, options)
+    // Fetch weather observations, ARPANSA UV, and air quality data in parallel
+    const [result, arpansaResult, airQualityResult] = await Promise.all([
+      fetchObservationsWithFallback(lat, longitude, options),
+      fetchARPANSAUV().catch(err => {
+        console.warn('ARPANSA UV fetch failed, UV will be unavailable:', err)
+        return null
+      }),
+      fetchAirQuality(lat, longitude).catch(err => {
+        console.warn('Air quality fetch failed, AQI will be unavailable:', err)
+        return null
+      })
+    ])
 
     // Transform to legacy format expected by the app, calculating WBGT for each observation
     const observations = result.observations.map((obs: ObservationData) => {
@@ -80,8 +93,17 @@ export async function fetchObservations(
         cloudCover = 100
       }
 
-      // Estimate UV index from solar radiation (if not available from source)
-      const uvIndex = solarRad > 0 ? Math.min(11, solarRad / 80) : 0
+      // Get UV index from ARPANSA (current real-time measurement)
+      const uvIndex = arpansaResult?.currentUV ?? undefined
+
+      // Get Australian AQI for this hour
+      let airQuality: number | undefined = undefined
+      if (airQualityResult) {
+        const aqiForHour = getAQIForTimestamp(airQualityResult, obs.time)
+        if (aqiForHour) {
+          airQuality = aqiForHour.overall
+        }
+      }
 
       // Calculate WBGT for this observation
       let wbgt = 0
@@ -121,7 +143,8 @@ export async function fetchObservations(
         wbgt,
         apparent_temp: apparentTemp,
         cloud_cover: cloudCover,
-        uv_index: uvIndex
+        uv_index: uvIndex,
+        air_quality: airQuality
       }
     })
 

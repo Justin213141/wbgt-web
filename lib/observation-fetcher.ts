@@ -543,20 +543,49 @@ export async function fetchObservationsWithFallback(
     solarData.hourly.time.forEach((time, i) => {
       const values = extractSolarRadiation(solarData!, solarSource!, i)
 
-      // Store original format
-      solarMap.set(time, values)
+      // Only store if values are valid (satellite API often returns null for recent hours)
+      if (!isNaN(values.shortwave) && values.shortwave !== null) {
+        // Store original format
+        solarMap.set(time, values)
 
-      // Normalize: if time is HH:MM format, also store with :00 seconds
-      // e.g., "2025-12-03T10:00" -> also store as "2025-12-03T10:00:00"
-      const timePart = time.split('T')[1] || ''
-      if (timePart.length === 5) {
-        // Format is HH:MM, add seconds
-        solarMap.set(`${time}:00`, values)
-      } else if (timePart.length === 8) {
-        // Format is HH:MM:SS, also store without seconds
-        solarMap.set(time.slice(0, -3), values)
+        // Normalize: if time is HH:MM format, also store with :00 seconds
+        // e.g., "2025-12-03T10:00" -> also store as "2025-12-03T10:00:00"
+        const timePart = time.split('T')[1] || ''
+        if (timePart.length === 5) {
+          // Format is HH:MM, add seconds
+          solarMap.set(`${time}:00`, values)
+        } else if (timePart.length === 8) {
+          // Format is HH:MM:SS, also store without seconds
+          solarMap.set(time.slice(0, -3), values)
+        }
       }
     })
+  }
+
+  // If satellite data is missing recent hours, fetch forecast data as fallback
+  const weatherTimes = weatherData?.hourly?.time || []
+  const missingTimes = weatherTimes.filter(time => !solarMap.has(time) && !solarMap.has(time.slice(0, -3)))
+
+  if (missingTimes.length > 0) {
+    console.log(`Satellite data missing for ${missingTimes.length} hours, fetching forecast fallback...`)
+    const forecastFallback = await fetchOpenMeteoSolarFallback(lat, lon, targetDate)
+    if (forecastFallback.data?.hourly?.time) {
+      forecastFallback.data.hourly.time.forEach((time, i) => {
+        const values = extractSolarRadiation(forecastFallback.data!, forecastFallback.source || 'openmeteo_forecast', i)
+        if (!isNaN(values.shortwave) && values.shortwave !== null) {
+          // Only fill in gaps - don't overwrite satellite data
+          if (!solarMap.has(time)) {
+            solarMap.set(time, values)
+            const timePart = time.split('T')[1] || ''
+            if (timePart.length === 5) {
+              solarMap.set(`${time}:00`, values)
+            } else if (timePart.length === 8) {
+              solarMap.set(time.slice(0, -3), values)
+            }
+          }
+        }
+      })
+    }
   }
 
   // Merge data into observations
@@ -591,8 +620,19 @@ export async function fetchObservationsWithFallback(
     }
   })
 
+  // Deduplicate observations by timestamp (BOM proxy sometimes returns duplicate timestamps
+  // for half-hourly data with the same :00 timestamp)
+  const seenTimestamps = new Set<string>()
+  const uniqueObservations = observations.filter(obs => {
+    if (seenTimestamps.has(obs.time)) {
+      return false
+    }
+    seenTimestamps.add(obs.time)
+    return true
+  })
+
   return {
-    observations,
+    observations: uniqueObservations,
     metadata: {
       lat,
       lon,

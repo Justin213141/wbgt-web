@@ -4,19 +4,17 @@ import { PageContainer } from "@/components/page-container"
 import { TodayConditions } from "@/components/today-conditions"
 import { HourlyStrip } from "@/components/hourly-strip"
 import { ForecastChart } from "@/components/forecast-chart"
-import { EnvironmentalMetrics } from "@/components/environmental-metrics"
 import { ModelSelector } from "@/components/model-selector"
 import useSWR from "swr"
 import { fetchObservations } from "@/lib/api"
+import { fetchAirQuality, getAQIForTimestamp, type AirQualityData } from "@/lib/air-quality"
 import { fetchAllModels, type ModelName, getSuccessfulModels } from "@/lib/model-fetcher"
 import { calculateKongWBGT, type WBGTParams } from "@/lib/kong-wbgt"
 import type { WeatherObservation, WeatherForecast, WeatherModelId } from "@/lib/types"
 import { calculateEnsembleStats, type EnsembleDataPoint } from "@/lib/ensemble-utils"
-import { Loader2, Settings } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { parseApiDate } from "@/lib/utils"
 import { useState, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 // Map model IDs from ModelSelector to ModelFetcher format
 const MODEL_ID_MAP: Record<string, ModelName> = {
@@ -33,7 +31,6 @@ export default function TodayPage() {
   // Multimodel toggle state - default to false (BOM only)
   const [multiModelEnabled, setMultiModelEnabled] = useState(false)
   const [modelStatus, setModelStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
-  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Determine which models to fetch based on toggle
   const enabledModels = multiModelEnabled ? MULTIMODEL_IDS : SINGLE_MODEL_IDS
@@ -42,6 +39,13 @@ export default function TodayPage() {
   const { data: observationsData } = useSWR<any>("observations", fetchObservations, {
     refreshInterval: 60000,
   })
+
+  // Fetch air quality forecast data
+  const { data: airQualityData } = useSWR<AirQualityData>(
+    "air-quality-forecast",
+    () => fetchAirQuality(-33.87, 151.21),
+    { refreshInterval: 300000 }
+  )
 
   // Fetch multi-model forecast data
   const { data: modelResults, error: modelError, isLoading: modelsLoading } = useSWR(
@@ -80,11 +84,11 @@ export default function TodayPage() {
   // Calculate WBGT from multi-model data
   // When multimodel is enabled: average input variables, then calculate WBGT
   // Extended to 12 hours for the hourly strip
-  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange } = useMemo(() => {
-    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null }
+  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange, ranges } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, ranges: null }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null }
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, ranges: null }
 
     // Get model IDs for legend display
     const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
@@ -93,12 +97,16 @@ export default function TodayPage() {
     const refModel = successfulModels[0]
     const times = refModel.times
 
-    // Extended to 12 hours for hourly strip
-    const maxHours = 12
+    // Extended to 48 hours for scrollable forecast
+    const maxHours = 48
     const limitedTimes = times.slice(0, maxHours)
 
-    // Arrays to collect WBGT range data when multimodel
+    // Arrays to collect range data when multimodel
     const wbgtRangeData: { min: number; max: number }[] = []
+    const tempRangeData: { min: number; max: number }[] = []
+    const humidityRangeData: { min: number; max: number }[] = []
+    const dewPointRangeData: { min: number; max: number }[] = []
+    const windSpeedRangeData: { min: number; max: number }[] = []
 
     // Calculate forecast data
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
@@ -178,11 +186,50 @@ export default function TodayPage() {
           max: modelWbgts.length > 0 ? Math.max(...modelWbgts) : wbgt,
         })
 
+        // Store ranges for other metrics
+        const validTemp = tempValues.filter(v => !isNaN(v))
+        tempRangeData.push({
+          min: validTemp.length > 0 ? Math.min(...validTemp) : avgTemp,
+          max: validTemp.length > 0 ? Math.max(...validTemp) : avgTemp,
+        })
+
+        const validHumidity = humidityValues.filter(v => !isNaN(v))
+        humidityRangeData.push({
+          min: validHumidity.length > 0 ? Math.min(...validHumidity) : avgHumidity,
+          max: validHumidity.length > 0 ? Math.max(...validHumidity) : avgHumidity,
+        })
+
+        const validWindSpeed = windSpeedValues.filter(v => !isNaN(v))
+        windSpeedRangeData.push({
+          min: validWindSpeed.length > 0 ? Math.min(...validWindSpeed) * 3.6 : avgWindSpeed * 3.6,
+          max: validWindSpeed.length > 0 ? Math.max(...validWindSpeed) * 3.6 : avgWindSpeed * 3.6,
+        })
+
         // Calculate dew point using Magnus formula approximation
         const a = 17.27
         const b = 237.7
         const alpha = (a * avgTemp) / (b + avgTemp) + Math.log(avgHumidity / 100)
         const dewPoint = (b * alpha) / (a - alpha)
+
+        // Calculate dew point for each model to get range
+        const modelDewPoints: number[] = []
+        successfulModels.forEach(model => {
+          if (idx < model.times.length) {
+            const temp = model.temperature[idx]
+            const hum = model.humidity[idx]
+            if (!isNaN(temp) && !isNaN(hum) && hum > 0) {
+              const alphaModel = (a * temp) / (b + temp) + Math.log(hum / 100)
+              const dpModel = (b * alphaModel) / (a - alphaModel)
+              if (!isNaN(dpModel)) {
+                modelDewPoints.push(dpModel)
+              }
+            }
+          }
+        })
+        dewPointRangeData.push({
+          min: modelDewPoints.length > 0 ? Math.min(...modelDewPoints) : dewPoint,
+          max: modelDewPoints.length > 0 ? Math.max(...modelDewPoints) : dewPoint,
+        })
 
         return {
           wbgt,
@@ -237,29 +284,120 @@ export default function TodayPage() {
       }
     })
 
-    // Calculate forecast summary for TodayConditions
-    const temps = forecastData.map(f => f.temperature)
-    const wbgts = forecastData.map(f => f.wbgt)
-    const rainChances = forecastData.map(f => f.rain_chance)
+    // Add air quality data to forecast
+    const forecastWithAQI = forecastData.map(f => {
+      if (airQualityData) {
+        const aqiResult = getAQIForTimestamp(airQualityData, f.timestamp || f.localTimestamp || '')
+        return {
+          ...f,
+          air_quality: aqiResult?.overall,
+        }
+      }
+      return f
+    })
 
-    const summary = {
-      minTemp: Math.min(...temps),
-      maxTemp: Math.max(...temps),
-      maxWbgt: Math.max(...wbgts),
-      rainChance: Math.max(...rainChances),
+    // Calculate forecast summary for TodayConditions - filter to today only
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const todayEnd = new Date(todayStart)
+    todayEnd.setDate(todayEnd.getDate() + 1)
+
+    const todayForecasts = forecastWithAQI.filter(f => {
+      const fDate = parseApiDate(f.timestamp || f.localTimestamp || '')
+      return fDate >= todayStart && fDate < todayEnd
+    })
+
+    const temps = todayForecasts.length > 0 ? todayForecasts.map(f => f.temperature) : forecastWithAQI.slice(0, 12).map(f => f.temperature)
+    const wbgts = todayForecasts.length > 0 ? todayForecasts.map(f => f.wbgt) : forecastWithAQI.slice(0, 12).map(f => f.wbgt)
+    const rainChances = todayForecasts.length > 0 ? todayForecasts.map(f => f.rain_chance) : forecastWithAQI.slice(0, 12).map(f => f.rain_chance)
+
+    const minTemp = Math.min(...temps)
+    const maxTemp = Math.max(...temps)
+    const maxWbgt = Math.max(...wbgts)
+    const maxRain = Math.max(...rainChances)
+
+    // Calculate WBGT time window (hours within 1°C of peak)
+    let maxWbgtTimeWindow: string | undefined
+    const wbgtWithTimes = (todayForecasts.length > 0 ? todayForecasts : forecastWithAQI.slice(0, 12))
+      .filter(f => f.wbgt >= maxWbgt - 1)
+      .map(f => parseApiDate(f.timestamp || f.localTimestamp || ''))
+    if (wbgtWithTimes.length > 0) {
+      const sortedTimes = wbgtWithTimes.sort((a, b) => a.getTime() - b.getTime())
+      const startHour = sortedTimes[0].getHours()
+      const endHour = sortedTimes[sortedTimes.length - 1].getHours() + 1
+      const formatHr = (h: number) => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`
+      maxWbgtTimeWindow = `${formatHr(startHour)}-${formatHr(endHour)}`
     }
 
+    // Calculate peak rain time (if any rain > 10%)
+    let peakRainTime: string | undefined
+    if (maxRain > 10) {
+      const peakRainForecast = (todayForecasts.length > 0 ? todayForecasts : forecastWithAQI.slice(0, 12))
+        .find(f => f.rain_chance === maxRain)
+      if (peakRainForecast) {
+        const peakTime = parseApiDate(peakRainForecast.timestamp || peakRainForecast.localTimestamp || '')
+        peakRainTime = peakTime.toLocaleTimeString("en-AU", { hour: "numeric", hour12: true }).toUpperCase()
+      }
+    }
+
+    // Calculate min/max temp ranges when multimodel is enabled
+    let minTempRange: { min: number; max: number } | undefined
+    let maxTempRange: { min: number; max: number } | undefined
+    if (multiModelEnabled && tempRangeData.length > 0) {
+      // Find the forecast objects with min/max temps
+      const sourceForecasts = todayForecasts.length > 0 ? todayForecasts : forecastWithAQI.slice(0, 12)
+      const minTempForecast = sourceForecasts.find(f => f.temperature === minTemp)
+      const maxTempForecast = sourceForecasts.find(f => f.temperature === maxTemp)
+
+      // Look up their indices in the original forecastWithAQI to get correct range data
+      if (minTempForecast) {
+        const originalIdx = forecastWithAQI.indexOf(minTempForecast)
+        if (originalIdx >= 0 && originalIdx < tempRangeData.length) {
+          minTempRange = tempRangeData[originalIdx]
+        }
+      }
+      if (maxTempForecast) {
+        const originalIdx = forecastWithAQI.indexOf(maxTempForecast)
+        if (originalIdx >= 0 && originalIdx < tempRangeData.length) {
+          maxTempRange = tempRangeData[originalIdx]
+        }
+      }
+    }
+
+    const summary = {
+      minTemp,
+      maxTemp,
+      minTempRange,
+      maxTempRange,
+      maxWbgt,
+      maxWbgtTimeWindow,
+      rainChance: maxRain,
+      peakRainTime,
+    }
+
+    // Build ranges object for HourlyStrip
+    const ranges = multiModelEnabled ? {
+      temperature: tempRangeData,
+      dew_point: dewPointRangeData,
+      humidity: humidityRangeData,
+      wind_speed: windSpeedRangeData,
+    } : null
+
     return {
-      forecast: forecastData,
+      forecast: forecastWithAQI,
       ensembleData: null, // We don't need ensemble data for charts anymore
       activeModels: modelIds,
       forecastSummary: summary,
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
+      ranges,
     }
-  }, [modelResults, multiModelEnabled])
+  }, [modelResults, multiModelEnabled, airQualityData])
 
-  // Get the most recent observation for current conditions
+  // Get the most recent observation for current conditions and calculate worst daily AQI
   let currentData: WeatherObservation | null = null
+  let worstDailyAqi: number | undefined = undefined
+  let worstDailyAqiTime: string | undefined = undefined
   if (observationsData) {
     let observations: WeatherObservation[] = []
     if (Array.isArray(observationsData)) {
@@ -275,8 +413,151 @@ export default function TodayPage() {
         return dateB.getTime() - dateA.getTime()
       })
       currentData = sorted[0]
+
+      // Calculate worst (highest) AQI from today's observations with timestamp
+      // Limited to 7am-10pm as AQI outside these hours is less relevant
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const todayAqiObs = observations
+        .filter(obs => {
+          const obsDate = parseApiDate(obs.timestamp || obs.localTimestamp || "")
+          const hour = obsDate.getHours()
+          return obsDate >= todayStart &&
+                 hour >= 7 && hour < 22 && // 7am to 10pm
+                 obs.air_quality !== undefined && obs.air_quality !== null
+        })
+
+      if (todayAqiObs.length > 0) {
+        const worstObs = todayAqiObs.reduce((worst, obs) =>
+          (obs.air_quality ?? 0) > (worst.air_quality ?? 0) ? obs : worst
+        )
+        worstDailyAqi = worstObs.air_quality
+        const worstTime = parseApiDate(worstObs.timestamp || worstObs.localTimestamp || '')
+        worstDailyAqiTime = worstTime.toLocaleTimeString("en-AU", {
+          hour: "numeric",
+          hour12: true
+        }).toUpperCase()
+      }
     }
   }
+
+  // Calculate tomorrow's summary from forecast
+  const tomorrowSummary = useMemo(() => {
+    if (forecast.length === 0) return undefined
+
+    const now = new Date()
+    const tomorrowStart = new Date(now)
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1)
+    tomorrowStart.setHours(0, 0, 0, 0)
+    const tomorrowEnd = new Date(tomorrowStart)
+    tomorrowEnd.setDate(tomorrowEnd.getDate() + 1)
+
+    const tomorrowForecasts = forecast.filter(f => {
+      const fDate = parseApiDate(f.timestamp || f.localTimestamp || '')
+      return fDate >= tomorrowStart && fDate < tomorrowEnd
+    })
+
+    if (tomorrowForecasts.length === 0) return undefined
+
+    const temps = tomorrowForecasts.map(f => f.temperature)
+    const wbgts = tomorrowForecasts.map(f => f.wbgt)
+    const rainChances = tomorrowForecasts.map(f => f.rain_chance)
+
+    const minTemp = Math.min(...temps)
+    const maxTemp = Math.max(...temps)
+    const maxWbgt = Math.max(...wbgts)
+    const maxRain = Math.max(...rainChances)
+
+    // Calculate WBGT time window (hours within 1°C of peak)
+    let maxWbgtTimeWindow: string | undefined
+    const wbgtWithTimes = tomorrowForecasts
+      .filter(f => f.wbgt >= maxWbgt - 1)
+      .map(f => parseApiDate(f.timestamp || f.localTimestamp || ''))
+    if (wbgtWithTimes.length > 0) {
+      const sortedTimes = wbgtWithTimes.sort((a, b) => a.getTime() - b.getTime())
+      const startHour = sortedTimes[0].getHours()
+      const endHour = sortedTimes[sortedTimes.length - 1].getHours() + 1
+      const formatHr = (h: number) => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`
+      maxWbgtTimeWindow = `${formatHr(startHour)}-${formatHr(endHour)}`
+    }
+
+    // Calculate peak rain time (if any rain > 10%)
+    let peakRainTime: string | undefined
+    if (maxRain > 10) {
+      const peakRainForecast = tomorrowForecasts.find(f => f.rain_chance === maxRain)
+      if (peakRainForecast) {
+        const peakTime = parseApiDate(peakRainForecast.timestamp || peakRainForecast.localTimestamp || '')
+        peakRainTime = peakTime.toLocaleTimeString("en-AU", { hour: "numeric", hour12: true }).toUpperCase()
+      }
+    }
+
+    // Find peak AQI for tomorrow with timestamp (limited to 7am-10pm)
+    let peakAqi: number | undefined
+    let peakAqiTime: string | undefined
+
+    const aqiForecasts = tomorrowForecasts.filter(f => {
+      if (f.air_quality === undefined || f.air_quality === null) return false
+      const hour = parseApiDate(f.timestamp || f.localTimestamp || '').getHours()
+      return hour >= 7 && hour < 22 // 7am to 10pm
+    })
+    if (aqiForecasts.length > 0) {
+      const peakForecast = aqiForecasts.reduce((peak, f) =>
+        (f.air_quality ?? 0) > (peak.air_quality ?? 0) ? f : peak
+      )
+      peakAqi = peakForecast.air_quality
+      const peakTime = parseApiDate(peakForecast.timestamp || peakForecast.localTimestamp || '')
+      peakAqiTime = peakTime.toLocaleTimeString("en-AU", {
+        hour: "numeric",
+        hour12: true
+      }).toUpperCase()
+    }
+
+    // Determine most extreme weather icon
+    // Priority: storm > rain > snow > wind > cloudy > partly cloudy > sunny
+    let iconDescriptor: string | undefined
+    const hasStorm = tomorrowForecasts.some(f => (f as any).icon_descriptor?.toLowerCase().includes('storm'))
+    const hasRain = maxRain > 30 || tomorrowForecasts.some(f => (f as any).icon_descriptor?.toLowerCase().includes('rain'))
+    const hasCloud = tomorrowForecasts.some(f => f.cloud_cover > 70)
+    if (hasStorm) iconDescriptor = 'storm'
+    else if (hasRain) iconDescriptor = 'rain'
+    else if (hasCloud) iconDescriptor = 'cloudy'
+    else iconDescriptor = 'sunny'
+
+    // Calculate min/max temp ranges when multimodel is enabled
+    let minTempRange: { min: number; max: number } | undefined
+    let maxTempRange: { min: number; max: number } | undefined
+    if (multiModelEnabled && ranges?.temperature && ranges.temperature.length > 0) {
+      const minTempForecast = tomorrowForecasts.find(f => f.temperature === minTemp)
+      const maxTempForecast = tomorrowForecasts.find(f => f.temperature === maxTemp)
+
+      if (minTempForecast) {
+        const originalIdx = forecast.indexOf(minTempForecast)
+        if (originalIdx >= 0 && originalIdx < ranges.temperature.length) {
+          minTempRange = ranges.temperature[originalIdx]
+        }
+      }
+      if (maxTempForecast) {
+        const originalIdx = forecast.indexOf(maxTempForecast)
+        if (originalIdx >= 0 && originalIdx < ranges.temperature.length) {
+          maxTempRange = ranges.temperature[originalIdx]
+        }
+      }
+    }
+
+    return {
+      minTemp,
+      maxTemp,
+      minTempRange,
+      maxTempRange,
+      maxWbgt,
+      maxWbgtTimeWindow,
+      rainChance: maxRain,
+      peakRainTime,
+      peakAqi,
+      peakAqiTime,
+      iconDescriptor,
+    }
+  }, [forecast, multiModelEnabled, ranges])
 
   // Derive current conditions from forecast if observations API fails
   const derivedCurrentData: WeatherObservation | null = forecast.length > 0 ? (() => {
@@ -300,16 +581,40 @@ export default function TodayPage() {
 
   // Use observations data if available, otherwise fall back to derived data
   // Only use currentData if it has the required wbgt field
-  const displayCurrentData = (currentData && 'wbgt' in currentData && currentData.wbgt !== undefined)
+  // Also supplement solar radiation from forecast if observation solar is 0/NaN during daytime
+  const rawDisplayData = (currentData && 'wbgt' in currentData && currentData.wbgt !== undefined)
     ? currentData
     : derivedCurrentData
+
+  // Supplement solar radiation from forecast when observation data is stale (satellite API lag)
+  const displayCurrentData = rawDisplayData ? (() => {
+    const hour = rawDisplayData.timestamp || rawDisplayData.localTimestamp
+      ? new Date(rawDisplayData.timestamp || rawDisplayData.localTimestamp || '').getHours()
+      : new Date().getHours()
+    const isDaytime = hour >= 6 && hour < 19
+    const solarIsStale = (rawDisplayData.solar_radiation ?? 0) === 0 && isDaytime
+
+    // If solar radiation is stale during daytime, use forecast data
+    if (solarIsStale && forecast.length > 0) {
+      const forecastSolar = forecast[0].solar_radiation
+      const forecastCloudCover = forecast[0].cloud_cover
+      return {
+        ...rawDisplayData,
+        solar_radiation: forecastSolar,
+        cloud_cover: forecastCloudCover
+      }
+    }
+    return rawDisplayData
+  })() : null
 
   const isLoading = modelsLoading || (!modelResults && !modelError)
   const hasError = modelError
   const hasValidData = displayCurrentData && 'wbgt' in displayCurrentData && displayCurrentData.wbgt !== undefined
 
-  // Get current WBGT range for display
-  const currentWbgtRange = wbgtRange && wbgtRange.length > 0 ? wbgtRange[0] : null
+  // Get current WBGT range for display - only show range if using derived (forecast) data
+  // When using actual observation data, WBGT is a single measured value, not a range
+  const isUsingObservationData = currentData && 'wbgt' in currentData && currentData.wbgt !== undefined
+  const currentWbgtRange = (!isUsingObservationData && wbgtRange && wbgtRange.length > 0) ? wbgtRange[0] : null
 
   return (
     <PageContainer title="Today" description="Current conditions and 12-hour forecast">
@@ -331,15 +636,18 @@ export default function TodayPage() {
           <TodayConditions
             data={displayCurrentData}
             forecastSummary={forecastSummary || undefined}
+            tomorrowSummary={tomorrowSummary}
             wbgtRange={currentWbgtRange}
             multiModelEnabled={multiModelEnabled}
+            worstDailyAqi={worstDailyAqi}
+            worstDailyAqiTime={worstDailyAqiTime}
           />
 
-          {/* 12-Hour Hourly Strip */}
+          {/* 36-Hour Scrollable Forecast */}
           <HourlyStrip
             data={forecast}
-            maxHours={12}
             wbgtRange={wbgtRange}
+            ranges={ranges}
             multiModelEnabled={multiModelEnabled}
           />
 
@@ -348,43 +656,17 @@ export default function TodayPage() {
             data={forecast.slice(0, 6)}
             models={activeModels}
             showUncertainty={false}
+            wbgtRange={wbgtRange?.slice(0, 6)}
+            tempRange={ranges?.temperature?.slice(0, 6)}
+            multiModelEnabled={multiModelEnabled}
           />
 
-          {/* Environmental Metrics - lower priority */}
-          <EnvironmentalMetrics
-            uvIndex={displayCurrentData.uv_index}
-            airQuality={displayCurrentData.air_quality}
-            forecastData={forecast.slice(0, 6)}
+          {/* Model Selector */}
+          <ModelSelector
+            multiModelEnabled={multiModelEnabled}
+            onMultiModelChange={setMultiModelEnabled}
+            modelStatus={modelStatus}
           />
-
-          {/* Model Selector - collapsed by default */}
-          <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <Card>
-              <CardHeader className="pb-3">
-                <CollapsibleTrigger className="flex items-center justify-between w-full group">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
-                    Forecast Models
-                    <span className="text-xs text-muted-foreground font-normal">
-                      ({multiModelEnabled ? '3 models' : 'BOM only'})
-                    </span>
-                  </CardTitle>
-                  <div className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                    {settingsOpen ? 'Hide' : 'Show'}
-                  </div>
-                </CollapsibleTrigger>
-              </CardHeader>
-              <CollapsibleContent>
-                <CardContent>
-                  <ModelSelector
-                    multiModelEnabled={multiModelEnabled}
-                    onMultiModelChange={setMultiModelEnabled}
-                    modelStatus={modelStatus}
-                  />
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
         </div>
       )}
 

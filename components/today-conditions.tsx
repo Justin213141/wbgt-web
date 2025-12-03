@@ -1,9 +1,34 @@
 "use client"
 
 import { Card } from "./ui/card"
-import { getWBGTZone, getWBGTZoneColor } from "@/lib/weather-utils"
+import {
+  getWBGTZone,
+  getWBGTZoneColor,
+  getWbgtTextColor,
+  getTemperatureTextColor,
+  getSolarRadiationTextColor,
+  getDewPointTextColor,
+  getUvIndexTextColor,
+  getAqiTextColor,
+  getWindSpeedTextColor
+} from "@/lib/weather-utils"
 import { parseApiDate } from "@/lib/utils"
-import { Cloud, Sun, CloudRain, CloudSun } from "lucide-react"
+import { Cloud, Sun, CloudRain, CloudSun, CloudLightning, CloudSnow, Wind, Thermometer } from "lucide-react"
+
+interface DaySummary {
+  minTemp: number
+  maxTemp: number
+  minTempRange?: { min: number; max: number }
+  maxTempRange?: { min: number; max: number }
+  maxWbgt: number
+  maxWbgtTimeWindow?: string  // e.g., "1PM-3PM"
+  rainChance: number
+  peakRainTime?: string
+  peakAqi?: number
+  peakAqiTime?: string
+  description?: string
+  iconDescriptor?: string  // BOM icon descriptor for weather icon
+}
 
 interface TodayConditionsProps {
   data: {
@@ -19,18 +44,15 @@ interface TodayConditionsProps {
     timestamp?: string
     localTimestamp?: string
   }
-  forecastSummary?: {
-    minTemp: number
-    maxTemp: number
-    maxWbgt: number
-    rainChance: number
-    description?: string
-  }
+  forecastSummary?: DaySummary
+  tomorrowSummary?: DaySummary
   wbgtRange?: { min: number; max: number } | null
   multiModelEnabled?: boolean
+  worstDailyAqi?: number
+  worstDailyAqiTime?: string
 }
 
-export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEnabled }: TodayConditionsProps) {
+export function TodayConditions({ data, forecastSummary, tomorrowSummary, wbgtRange, multiModelEnabled, worstDailyAqi, worstDailyAqiTime }: TodayConditionsProps) {
   const wbgtValue = data.wbgt ?? 0
   const zone = getWBGTZone(wbgtValue)
   const zoneColors = getWBGTZoneColor(zone)
@@ -44,11 +66,33 @@ export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEn
       }).toUpperCase() + " AEDT"
     : ""
 
-  // Weather icon based on cloud cover and conditions
+  // Weather icon based on cloud cover and conditions (for current conditions)
   const getWeatherIcon = () => {
     if (data.cloud_cover > 80) return <Cloud className="h-12 w-12 text-gray-500" />
     if (data.cloud_cover > 40) return <CloudSun className="h-12 w-12 text-yellow-500" />
     return <Sun className="h-12 w-12 text-yellow-500" />
+  }
+
+  // Weather icon from BOM icon descriptor (for forecasts)
+  const getWeatherIconFromDescriptor = (descriptor?: string, size: string = "h-12 w-12") => {
+    if (!descriptor) return <Sun className={`${size} text-yellow-500`} />
+    const d = descriptor.toLowerCase()
+    // Storm icons (most extreme)
+    if (d.includes('storm') || d.includes('thunder')) return <CloudLightning className={`${size} text-purple-500`} />
+    // Rain icons
+    if (d.includes('rain') || d.includes('shower')) return <CloudRain className={`${size} text-blue-500`} />
+    // Snow/hail
+    if (d.includes('snow') || d.includes('hail') || d.includes('frost')) return <CloudSnow className={`${size} text-blue-300`} />
+    // Wind
+    if (d.includes('wind') || d.includes('dust')) return <Wind className={`${size} text-gray-500`} />
+    // Cloudy
+    if (d.includes('overcast') || d.includes('cloudy')) return <Cloud className={`${size} text-gray-400`} />
+    // Partly cloudy
+    if (d.includes('partly') || d.includes('cloud')) return <CloudSun className={`${size} text-yellow-500`} />
+    // Hot
+    if (d.includes('hot') || d.includes('heat')) return <Thermometer className={`${size} text-red-500`} />
+    // Default - sunny/clear
+    return <Sun className={`${size} text-yellow-500`} />
   }
 
   // UV Index category
@@ -60,13 +104,14 @@ export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEn
     return "Extreme"
   }
 
-  // Air Quality category (assuming AQI scale)
+  // Australian Air Quality Index categories (NEPM standards)
   const getAqCategory = (aqi?: number) => {
-    if (!aqi) return "N/A"
-    if (aqi <= 50) return "Good"
-    if (aqi <= 100) return "Moderate"
-    if (aqi <= 150) return "Unhealthy (Sensitive)"
-    return "Unhealthy"
+    if (aqi === undefined || aqi === null) return "N/A"
+    if (aqi <= 33) return "Very Good"
+    if (aqi <= 66) return "Good"
+    if (aqi <= 99) return "Fair"
+    if (aqi <= 149) return "Poor"
+    return "Very Poor"
   }
 
   // Format WBGT with range if multimodel is enabled
@@ -132,11 +177,13 @@ export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEn
             </div>
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Dew Point</div>
-              <div className="text-lg font-semibold text-gray-800">{(data.dew_point ?? 0).toFixed(1)}°C</div>
+              <div className={`text-lg font-semibold ${getDewPointTextColor(data.dew_point ?? 0)}`}>
+                {(data.dew_point ?? 0).toFixed(1)}°C
+              </div>
             </div>
             <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Wind</div>
-              <div className="text-lg font-semibold text-gray-800">
+              <div className={`text-lg font-semibold ${getWindSpeedTextColor((data.wind_speed_ms ?? 0) * 3.6)}`}>
                 {((data.wind_speed_ms ?? 0) * 3.6).toFixed(0)} km/h
               </div>
             </div>
@@ -144,9 +191,17 @@ export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEn
               <div className="text-xs text-gray-500 uppercase tracking-wide">Cloud Cover</div>
               <div className="text-lg font-semibold text-gray-800">{(data.cloud_cover ?? 0).toFixed(0)}%</div>
             </div>
-            <div className="col-span-2">
+            <div>
               <div className="text-xs text-gray-500 uppercase tracking-wide">Solar Radiation</div>
-              <div className="text-lg font-semibold text-gray-800">{(data.solar_radiation ?? 0).toFixed(0)} W/m²</div>
+              <div className={`text-lg font-semibold ${getSolarRadiationTextColor(data.solar_radiation ?? 0)}`}>
+                {(data.solar_radiation ?? 0).toFixed(0)} W/m²
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 uppercase tracking-wide">UV</div>
+              <div className={`text-lg font-semibold ${getUvIndexTextColor(data.uv_index ?? 0)}`}>
+                {data.uv_index !== undefined ? Math.round(data.uv_index) : "N/A"}
+              </div>
             </div>
           </div>
         </div>
@@ -155,7 +210,7 @@ export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEn
         <div className="p-6 bg-white border-l border-gray-100">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
-              {getWeatherIcon()}
+              {forecastSummary?.iconDescriptor ? getWeatherIconFromDescriptor(forecastSummary.iconDescriptor) : getWeatherIcon()}
               <div>
                 <div className="text-lg font-semibold text-gray-800">Today</div>
                 <div className="text-sm text-gray-500">
@@ -165,56 +220,136 @@ export function TodayConditions({ data, forecastSummary, wbgtRange, multiModelEn
             </div>
             {forecastSummary && (
               <div className="flex gap-2">
-                <span className="px-2 py-1 text-sm font-medium rounded bg-blue-100 text-blue-700">
-                  {(forecastSummary.minTemp ?? 0).toFixed(0)}°
-                </span>
-                <span className="px-2 py-1 text-sm font-medium rounded bg-orange-100 text-orange-700">
-                  {(forecastSummary.maxTemp ?? 0).toFixed(0)}°
-                </span>
+                <div className="text-center">
+                  <span className={`px-2 py-1 text-sm font-medium rounded bg-blue-100 ${getTemperatureTextColor(forecastSummary.minTemp ?? 0)}`}>
+                    {(forecastSummary.minTemp ?? 0).toFixed(0)}°
+                  </span>
+                  {multiModelEnabled && forecastSummary.minTempRange && (
+                    <div className="text-[9px] text-gray-500 mt-0.5">
+                      ({forecastSummary.minTempRange.min.toFixed(0)}-{forecastSummary.minTempRange.max.toFixed(0)})
+                    </div>
+                  )}
+                </div>
+                <div className="text-center">
+                  <span className={`px-2 py-1 text-sm font-medium rounded bg-orange-100 ${getTemperatureTextColor(forecastSummary.maxTemp ?? 0)}`}>
+                    {(forecastSummary.maxTemp ?? 0).toFixed(0)}°
+                  </span>
+                  {multiModelEnabled && forecastSummary.maxTempRange && (
+                    <div className="text-[9px] text-gray-500 mt-0.5">
+                      ({forecastSummary.maxTempRange.min.toFixed(0)}-{forecastSummary.maxTempRange.max.toFixed(0)})
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           {forecastSummary && (
             <p className="text-sm text-gray-600 mb-4">
-              {forecastSummary.description || `Peak WBGT ${(forecastSummary.maxWbgt ?? 0).toFixed(0)}° expected today.`}
+              {forecastSummary.description || (
+                <>
+                  Peak WBGT <span className={`font-semibold ${getWbgtTextColor(forecastSummary.maxWbgt ?? 0)}`}>{(forecastSummary.maxWbgt ?? 0).toFixed(0)}°</span>
+                  {forecastSummary.maxWbgtTimeWindow && <span className="text-gray-500"> ({forecastSummary.maxWbgtTimeWindow})</span>}
+                </>
+              )}
             </p>
           )}
 
           {/* Secondary Metrics */}
           <div className="space-y-3 pt-4 border-t border-gray-100">
-            {forecastSummary && (
+            {forecastSummary && forecastSummary.rainChance > 0 && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CloudRain className="h-4 w-4 text-blue-500" />
                   <span className="text-sm text-gray-600">Rain</span>
                 </div>
-                <span className="text-sm font-medium text-gray-800">
-                  {forecastSummary.rainChance}%
+                <span className="text-sm font-medium text-blue-600">
+                  {forecastSummary.rainChance}%{forecastSummary.peakRainTime && ` at ${forecastSummary.peakRainTime}`}
                 </span>
               </div>
             )}
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sun className="h-4 w-4 text-yellow-500" />
-                <span className="text-sm text-gray-600">UV Index</span>
-              </div>
-              <span className="text-sm font-medium text-gray-800">
-                {data.uv_index !== undefined ? getUvCategory(data.uv_index) : "N/A"}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
                 <Cloud className="h-4 w-4 text-gray-400" />
-                <span className="text-sm text-gray-600">Air Quality</span>
+                <span className="text-sm text-gray-600">Peak AQI</span>
               </div>
-              <span className="text-sm font-medium text-gray-800">
-                {getAqCategory(data.air_quality)}
+              <span className={`text-sm font-medium ${getAqiTextColor(worstDailyAqi)}`}>
+                {worstDailyAqi !== undefined
+                  ? `${Math.round(worstDailyAqi)} (${getAqCategory(worstDailyAqi)})${worstDailyAqiTime ? ` at ${worstDailyAqiTime}` : ''}`
+                  : "N/A"}
               </span>
             </div>
           </div>
+
+          {/* Tomorrow Section */}
+          {tomorrowSummary && (
+            <div className="pt-4 mt-4 border-t border-gray-200">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  {getWeatherIconFromDescriptor(tomorrowSummary.iconDescriptor, "h-10 w-10")}
+                  <div>
+                    <div className="text-lg font-semibold text-gray-800">Tomorrow</div>
+                    <div className="text-sm text-gray-500">
+                      {tomorrowSummary.description || (
+                        <>
+                          Peak WBGT <span className={`font-semibold ${getWbgtTextColor(tomorrowSummary.maxWbgt ?? 0)}`}>{(tomorrowSummary.maxWbgt ?? 0).toFixed(0)}°</span>
+                          {tomorrowSummary.maxWbgtTimeWindow && <span> ({tomorrowSummary.maxWbgtTimeWindow})</span>}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="text-center">
+                    <span className={`px-2 py-1 text-sm font-medium rounded bg-blue-100 ${getTemperatureTextColor(tomorrowSummary.minTemp ?? 0)}`}>
+                      {(tomorrowSummary.minTemp ?? 0).toFixed(0)}°
+                    </span>
+                    {multiModelEnabled && tomorrowSummary.minTempRange && (
+                      <div className="text-[9px] text-gray-500 mt-0.5">
+                        ({tomorrowSummary.minTempRange.min.toFixed(0)}-{tomorrowSummary.minTempRange.max.toFixed(0)})
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <span className={`px-2 py-1 text-sm font-medium rounded bg-orange-100 ${getTemperatureTextColor(tomorrowSummary.maxTemp ?? 0)}`}>
+                      {(tomorrowSummary.maxTemp ?? 0).toFixed(0)}°
+                    </span>
+                    {multiModelEnabled && tomorrowSummary.maxTempRange && (
+                      <div className="text-[9px] text-gray-500 mt-0.5">
+                        ({tomorrowSummary.maxTempRange.min.toFixed(0)}-{tomorrowSummary.maxTempRange.max.toFixed(0)})
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {tomorrowSummary.rainChance > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CloudRain className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm text-gray-600">Rain</span>
+                    </div>
+                    <span className="text-sm font-medium text-blue-600">
+                      {tomorrowSummary.rainChance}%{tomorrowSummary.peakRainTime && ` at ${tomorrowSummary.peakRainTime}`}
+                    </span>
+                  </div>
+                )}
+                {tomorrowSummary.peakAqi !== undefined && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Cloud className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">Peak AQI</span>
+                    </div>
+                    <span className={`text-sm font-medium ${getAqiTextColor(tomorrowSummary.peakAqi)}`}>
+                      {Math.round(tomorrowSummary.peakAqi)} ({getAqCategory(tomorrowSummary.peakAqi)})
+                      {tomorrowSummary.peakAqiTime ? ` at ${tomorrowSummary.peakAqiTime}` : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Card>

@@ -70,7 +70,6 @@ export default function WeatherDashboard() {
 
       {/* Environmental Health Metrics */}
       <EnvironmentalMetrics
-        uvIndex={currentData.uv_index}
         airQuality={currentData.air_quality}
         forecastData={forecastData}
       />

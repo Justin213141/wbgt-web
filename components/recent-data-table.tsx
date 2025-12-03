@@ -5,7 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table"
 import type { WeatherObservation } from "@/lib/types"
 import { ArrowUp, ArrowDown, Minus } from "lucide-react"
-import { getWBGTZone } from "@/lib/weather-utils"
+import {
+  getWBGTZone,
+  getWbgtTextColor,
+  getTemperatureTextColor,
+  getSolarRadiationTextColor,
+  getWindSpeedTextColor,
+  getDewPointTextColor,
+  getUvIndexTextColor,
+  getAqiTextColor
+} from "@/lib/weather-utils"
 import { parseApiDate } from "@/lib/utils"
 
 interface RecentDataTableProps {
@@ -90,17 +99,14 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                 <TableHead className="cursor-pointer" onClick={() => handleSort("temperature")}>
                   Temp
                 </TableHead>
-                <TableHead className="cursor-pointer" onClick={() => handleSort("apparent_temp")}>
-                  Feels Like
-                </TableHead>
                 <TableHead className="cursor-pointer" onClick={() => handleSort("humidity")}>
                   Humidity
                 </TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort("wind_speed_ms")}>
+                  Wind
+                </TableHead>
                 <TableHead className="cursor-pointer" onClick={() => handleSort("solar_radiation")}>
                   Solar Rad
-                </TableHead>
-                <TableHead className="cursor-pointer" onClick={() => handleSort("uv_index")}>
-                  UV
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -130,7 +136,7 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                                       : "#991b1b", // Extreme - dark red
                           }}
                         />
-                        <span className="font-semibold">{wbgtValue.toFixed(1)}°C</span>
+                        <span className={`font-semibold ${getWbgtTextColor(wbgtValue)}`}>{wbgtValue.toFixed(1)}°C</span>
                         {getTrend(originalIndex, "wbgt") === "up" && <ArrowUp className="h-3 w-3 text-red-500" />}
                         {getTrend(originalIndex, "wbgt") === "down" && <ArrowDown className="h-3 w-3 text-green-500" />}
                         {getTrend(originalIndex, "wbgt") === "same" && <Minus className="h-3 w-3 text-gray-400" />}
@@ -138,7 +144,9 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {(row.temperature ?? 0).toFixed(1)}°C
+                        <span className={getTemperatureTextColor(row.temperature ?? 0)}>
+                          {(row.temperature ?? 0).toFixed(1)}°C
+                        </span>
                         {getTrend(originalIndex, "temperature") === "up" && (
                           <ArrowUp className="h-3 w-3 text-red-500" />
                         )}
@@ -147,20 +155,23 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                         )}
                       </div>
                     </TableCell>
+                    <TableCell>{row.humidity ?? 0}%</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {(row.apparent_temp ?? 0).toFixed(1)}°C
-                        {getTrend(originalIndex, "apparent_temp") === "up" && (
-                          <ArrowUp className="h-3 w-3 text-red-500" />
+                        <span className={getWindSpeedTextColor((row.wind_speed_ms ?? 0) * 3.6)}>
+                          {((row.wind_speed_ms ?? 0) * 3.6).toFixed(0)} km/h
+                        </span>
+                        {getTrend(originalIndex, "wind_speed_ms") === "up" && (
+                          <ArrowUp className="h-3 w-3 text-gray-500" />
                         )}
-                        {getTrend(originalIndex, "apparent_temp") === "down" && (
-                          <ArrowDown className="h-3 w-3 text-blue-500" />
+                        {getTrend(originalIndex, "wind_speed_ms") === "down" && (
+                          <ArrowDown className="h-3 w-3 text-gray-500" />
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{row.humidity ?? 0}%</TableCell>
-                    <TableCell>{(row.solar_radiation ?? 0).toFixed(0)} W/m²</TableCell>
-                    <TableCell>{(row.uv_index ?? 0).toFixed(1)}</TableCell>
+                    <TableCell className={getSolarRadiationTextColor(row.solar_radiation ?? 0)}>
+                      {(row.solar_radiation ?? 0).toFixed(0)} W/m²
+                    </TableCell>
                   </TableRow>
                 )
               })}
