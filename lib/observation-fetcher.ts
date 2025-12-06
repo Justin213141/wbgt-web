@@ -422,6 +422,49 @@ interface SolarRadiationValues {
   diffuse: number
 }
 
+/**
+ * Interpolate solar radiation for :30 timestamps
+ * Solar data is only available hourly, so :30 values are computed as
+ * the average of the current hour and next hour values
+ */
+function interpolateSolarRadiation(
+  observations: ObservationData[],
+  solarMap: Map<string, SolarRadiationValues>
+): ObservationData[] {
+  return observations.map((obs, index) => {
+    // Check if this is a :30 timestamp
+    const isHalfHour = /:30/.test(obs.time)
+    if (!isHalfHour) return obs
+
+    // Get the current hour timestamp (for looking up in solarMap)
+    const currentHourTime = obs.time.replace(/:30:00$/, ':00:00').replace(/:30$/, ':00')
+
+    // Get the next hour timestamp
+    const date = new Date(currentHourTime)
+    date.setHours(date.getHours() + 1)
+    const nextHourTime = date.toISOString().split('.')[0]
+    const nextHourTimeShort = nextHourTime.slice(0, -3) // without seconds
+
+    // Try to get solar values for current and next hour
+    const currentSolar = solarMap.get(currentHourTime) || solarMap.get(currentHourTime.slice(0, -3))
+    const nextSolar = solarMap.get(nextHourTime) || solarMap.get(nextHourTimeShort)
+
+    // If we have both values, interpolate
+    if (currentSolar && nextSolar &&
+        !isNaN(currentSolar.shortwave) && !isNaN(nextSolar.shortwave)) {
+      return {
+        ...obs,
+        solarRadiation: (currentSolar.shortwave + nextSolar.shortwave) / 2,
+        directRadiation: (currentSolar.direct + nextSolar.direct) / 2,
+        diffuseRadiation: (currentSolar.diffuse + nextSolar.diffuse) / 2
+      }
+    }
+
+    // If we only have current hour, use it (already set from original processing)
+    return obs
+  })
+}
+
 function extractSolarRadiation(
   data: SatelliteRadiationResponse,
   source: 'satellite_seamless' | 'satellite_best_match' | 'openmeteo_forecast' | 'openmeteo_archive',
@@ -620,16 +663,24 @@ export async function fetchObservationsWithFallback(
     }
   })
 
-  // Deduplicate observations by timestamp (BOM proxy sometimes returns duplicate timestamps
-  // for half-hourly data with the same :00 timestamp)
+  // Fix half-hourly timestamps: BOM proxy returns duplicate :00 timestamps
+  // for data that should be at :00 and :30
   const seenTimestamps = new Set<string>()
-  const uniqueObservations = observations.filter(obs => {
+  const fixedObservations = observations.map(obs => {
     if (seenTimestamps.has(obs.time)) {
-      return false
+      // This is a duplicate - it should be :30 data
+      // Change :00 to :30 in the timestamp
+      const fixedTime = obs.time.replace(/T(\d{2}):00:00$/, 'T$1:30:00')
+        .replace(/T(\d{2}):00$/, 'T$1:30')
+      return { ...obs, time: fixedTime }
     }
     seenTimestamps.add(obs.time)
-    return true
+    return obs
   })
+
+  // Interpolate solar radiation for :30 timestamps
+  // Solar data is only hourly, so :30 values should be the average of adjacent hours
+  const uniqueObservations = interpolateSolarRadiation(fixedObservations, solarMap)
 
   return {
     observations: uniqueObservations,
