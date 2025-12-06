@@ -1,5 +1,15 @@
 # WBGT Web Project Notes
 
+## CRITICAL: Deployment
+
+**NEVER run `npm run build` directly.** Always use:
+```bash
+GITHUB_PAGES=true npm run build && git add docs/ && git commit -m "build: update GitHub Pages" && git push
+```
+Without `GITHUB_PAGES=true`, assets load from wrong paths and the site breaks.
+
+---
+
 ## Current Focus
 - Today page: AQI in chart, color-coded metrics, 48h forecast, multimodel temp ranges
 - HourlyForecastTable: visual day separator at midnight boundaries
