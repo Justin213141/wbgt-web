@@ -102,6 +102,9 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                 <TableHead className="cursor-pointer" onClick={() => handleSort("humidity")}>
                   Humidity
                 </TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort("dew_point")}>
+                  Dew Pt
+                </TableHead>
                 <TableHead className="cursor-pointer" onClick={() => handleSort("wind_speed_ms")}>
                   Wind
                 </TableHead>
@@ -157,9 +160,14 @@ export function RecentDataTable({ data }: RecentDataTableProps) {
                     </TableCell>
                     <TableCell>{row.humidity ?? 0}%</TableCell>
                     <TableCell>
+                      <span className={getDewPointTextColor(row.dew_point ?? 0)}>
+                        {(row.dew_point ?? 0).toFixed(1)}°C
+                      </span>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-1">
                         <span className={getWindSpeedTextColor((row.wind_speed_ms ?? 0) * 3.6)}>
-                          {((row.wind_speed_ms ?? 0) * 3.6).toFixed(0)} km/h
+                          {(row.wind_speed_ms ?? 0).toFixed(1)} m/s
                         </span>
                         {getTrend(originalIndex, "wind_speed_ms") === "up" && (
                           <ArrowUp className="h-3 w-3 text-gray-500" />

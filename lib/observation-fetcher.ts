@@ -439,11 +439,28 @@ function interpolateSolarRadiation(
     // Get the current hour timestamp (for looking up in solarMap)
     const currentHourTime = obs.time.replace(/:30:00$/, ':00:00').replace(/:30$/, ':00')
 
-    // Get the next hour timestamp
-    const date = new Date(currentHourTime)
-    date.setHours(date.getHours() + 1)
-    const nextHourTime = date.toISOString().split('.')[0]
-    const nextHourTimeShort = nextHourTime.slice(0, -3) // without seconds
+    // Get the next hour timestamp by string manipulation (avoid timezone conversion)
+    // Parse hour from timestamp like "2025-12-06T13:00:00" or "2025-12-06T13:00"
+    const hourMatch = currentHourTime.match(/T(\d{2}):/)
+    if (!hourMatch) return obs
+
+    const currentHour = parseInt(hourMatch[1], 10)
+    const nextHour = (currentHour + 1) % 24
+    const nextHourStr = nextHour.toString().padStart(2, '0')
+
+    // Handle day rollover for midnight
+    let nextHourTime = currentHourTime.replace(/T\d{2}:/, `T${nextHourStr}:`)
+    if (nextHour === 0) {
+      // Day rollover - increment the date
+      const dateMatch = currentHourTime.match(/(\d{4})-(\d{2})-(\d{2})/)
+      if (dateMatch) {
+        const d = new Date(parseInt(dateMatch[1]), parseInt(dateMatch[2]) - 1, parseInt(dateMatch[3]))
+        d.setDate(d.getDate() + 1)
+        const newDateStr = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`
+        nextHourTime = nextHourTime.replace(/\d{4}-\d{2}-\d{2}/, newDateStr)
+      }
+    }
+    const nextHourTimeShort = nextHourTime.replace(/:00$/, '').replace(/:00:00$/, ':00')
 
     // Try to get solar values for current and next hour
     const currentSolar = solarMap.get(currentHourTime) || solarMap.get(currentHourTime.slice(0, -3))
