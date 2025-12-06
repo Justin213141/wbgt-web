@@ -79,7 +79,15 @@ export async function fetchObservations(
       const humidity = isNaN(obs.humidity) ? 50 : obs.humidity
       const windSpeed = isNaN(obs.windSpeed) ? 0 : obs.windSpeed
       const solarRad = isNaN(obs.solarRadiation) ? 0 : obs.solarRadiation
-      const dewPoint = isNaN(obs.dewPoint) ? temp - ((100 - humidity) / 5) : obs.dewPoint // Simple estimate if missing
+      // Calculate dew point using Magnus formula if not provided
+      let dewPoint = obs.dewPoint
+      if (isNaN(dewPoint)) {
+        // Magnus formula: γ = ln(RH/100) + (b*T)/(c+T), Td = (c*γ)/(b-γ)
+        const b = 17.625
+        const c = 243.04
+        const gamma = Math.log(humidity / 100) + (b * temp) / (c + temp)
+        dewPoint = (c * gamma) / (b - gamma)
+      }
       const pressure = isNaN(obs.pressure) ? 1013 : obs.pressure
 
       // Estimate cloud cover from solar radiation (BOM observations don't include it)
