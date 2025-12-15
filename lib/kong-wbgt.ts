@@ -25,6 +25,10 @@ export interface WBGTParams {
   windSpeed: number;
   /** Solar radiation in Watts per square meter */
   solarRadiation: number;
+  /** Direct beam radiation in Watts per square meter (optional, improves accuracy) */
+  directRadiation?: number;
+  /** Diffuse radiation in Watts per square meter (optional, improves accuracy) */
+  diffuseRadiation?: number;
   /** Latitude in decimal degrees */
   latitude: number;
   /** Longitude in decimal degrees */
@@ -173,49 +177,296 @@ function calculateConvectiveCoefficient(
 }
 
 /**
- * Calculate solar altitude angle
+ * Calculate Julian Date from a JavaScript Date object
  *
- * @param latitude - Latitude in decimal degrees
- * @param timestamp - Time of calculation
- * @returns Solar altitude angle in radians
+ * Reference: NOAA Solar Calculator
+ * https://gml.noaa.gov/grad/solcalc/calcdetails.html
+ *
+ * @param date - JavaScript Date object (in local time)
+ * @returns Julian Date
  */
-function calculateSolarAltitude(latitude: number, timestamp: Date): number {
-  const dayOfYear = Math.floor(
-    (timestamp.getTime() - new Date(timestamp.getFullYear(), 0, 0).getTime()) / 86400000
-  );
+function calculateJulianDate(date: Date): number {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1; // JavaScript months are 0-indexed
+  const day = date.getDate();
+  const hour = date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
 
-  // Solar declination (radians)
-  const declination = (23.45 * Math.PI / 180) * Math.sin(
-    (2 * Math.PI / 365) * (dayOfYear - 81)
-  );
+  // Adjust for January/February
+  let y = year;
+  let m = month;
+  if (month <= 2) {
+    y = year - 1;
+    m = month + 12;
+  }
 
-  // Hour angle (radians)
-  const hourAngle = (timestamp.getHours() + timestamp.getMinutes() / 60 - 12) * (Math.PI / 12);
+  const A = Math.floor(y / 100);
+  const B = 2 - A + Math.floor(A / 4);
 
-  // Latitude in radians
-  const latRad = latitude * Math.PI / 180;
+  const JD = Math.floor(365.25 * (y + 4716)) +
+             Math.floor(30.6001 * (m + 1)) +
+             day + hour / 24 + B - 1524.5;
 
-  // Solar altitude angle
-  const altitude = Math.asin(
-    Math.sin(latRad) * Math.sin(declination) +
-    Math.cos(latRad) * Math.cos(declination) * Math.cos(hourAngle)
-  );
-
-  return Math.max(0, altitude); // Cannot be negative
+  return JD;
 }
 
 /**
- * Calculate black globe temperature using Kong method
+ * Convert degrees to radians
+ */
+function degToRad(deg: number): number {
+  return deg * Math.PI / 180;
+}
+
+/**
+ * Convert radians to degrees
+ */
+function radToDeg(rad: number): number {
+  return rad * 180 / Math.PI;
+}
+
+/**
+ * Calculate solar zenith angle using full NOAA Solar Calculator algorithm
  *
- * This solves the heat balance equation for a black globe thermometer:
- * Solar radiation absorbed + Longwave radiation absorbed =
- * Longwave radiation emitted + Convective heat loss
+ * This implementation fixes critical bugs in simplified formulas:
+ * 1. Missing timezone offset in True Solar Time calculation
+ * 2. Hour angle sign error
+ * 3. Missing Equation of Time correction
+ *
+ * Reference: NOAA Solar Calculator
+ * https://gml.noaa.gov/grad/solcalc/calcdetails.html
+ *
+ * @param lat - Latitude in decimal degrees
+ * @param lon - Longitude in decimal degrees
+ * @param timestamp - Local timestamp for calculation
+ * @param utcOffset - UTC offset in hours (e.g., 10 for AEST, 11 for AEDT)
+ * @returns Solar zenith angle in degrees (0° = overhead, 90° = horizon)
+ */
+function calculateSolarZenithAngleNOAA(
+  lat: number,
+  lon: number,
+  timestamp: Date,
+  utcOffset: number
+): number {
+  // Julian Date and Century from J2000.0
+  const JD = calculateJulianDate(timestamp);
+  const JD_utc = JD - utcOffset / 24; // Convert local to UTC
+  const JC = (JD_utc - 2451545.0) / 36525.0;
+
+  // Geometric Mean Longitude of Sun (degrees)
+  const geomMeanLong = (280.46646 + JC * (36000.76983 + 0.0003032 * JC)) % 360;
+
+  // Geometric Mean Anomaly of Sun (degrees)
+  const geomMeanAnom = 357.52911 + JC * (35999.05029 - 0.0001537 * JC);
+
+  // Eccentricity of Earth's Orbit
+  const eccent = 0.016708634 - JC * (0.000042037 + 0.0000001267 * JC);
+
+  // Sun's Equation of Center (degrees)
+  const sunEqCtr = Math.sin(degToRad(geomMeanAnom)) * (1.914602 - JC * (0.004817 + 0.000014 * JC)) +
+                   Math.sin(degToRad(2 * geomMeanAnom)) * (0.019993 - 0.000101 * JC) +
+                   Math.sin(degToRad(3 * geomMeanAnom)) * 0.000289;
+
+  // Sun's True Longitude (degrees)
+  const sunTrueLong = geomMeanLong + sunEqCtr;
+
+  // Apparent Longitude of Sun (degrees)
+  const omega = 125.04 - 1934.136 * JC;
+  const sunAppLong = sunTrueLong - 0.00569 - 0.00478 * Math.sin(degToRad(omega));
+
+  // Mean Obliquity of Ecliptic (degrees)
+  const meanObliq = 23 + (26 + (21.448 - JC * (46.815 + JC * (0.00059 - JC * 0.001813))) / 60) / 60;
+
+  // Corrected Obliquity (degrees)
+  const obliqCorr = meanObliq + 0.00256 * Math.cos(degToRad(omega));
+
+  // Sun's Declination (radians)
+  const declination = Math.asin(Math.sin(degToRad(obliqCorr)) * Math.sin(degToRad(sunAppLong)));
+
+  // Variable y for Equation of Time
+  const varY = Math.tan(degToRad(obliqCorr / 2)) ** 2;
+
+  // Equation of Time (minutes)
+  const eqOfTime = 4 * radToDeg(
+    varY * Math.sin(2 * degToRad(geomMeanLong)) -
+    2 * eccent * Math.sin(degToRad(geomMeanAnom)) +
+    4 * eccent * varY * Math.sin(degToRad(geomMeanAnom)) * Math.cos(2 * degToRad(geomMeanLong)) -
+    0.5 * varY ** 2 * Math.sin(4 * degToRad(geomMeanLong)) -
+    1.25 * eccent ** 2 * Math.sin(2 * degToRad(geomMeanAnom))
+  );
+
+  // Clock hour (fractional)
+  const clockHour = timestamp.getHours() + timestamp.getMinutes() / 60 + timestamp.getSeconds() / 3600;
+
+  // True Solar Time (minutes)
+  // CRITICAL: Include timezone offset correction (-60 * utcOffset)
+  // Without this, UTC+11 locations would be off by 165° (11 hours × 15°/hour)
+  let trueSolarTime = (clockHour * 60 + eqOfTime + 4 * lon - 60 * utcOffset) % 1440;
+  if (trueSolarTime < 0) {
+    trueSolarTime += 1440;
+  }
+
+  // Hour Angle (degrees)
+  // CRITICAL: Correct formula is trueSolarTime/4 - 180
+  // NOT 15 × (12 - localSolarTime) which inverts the sign
+  let hourAngle: number;
+  if (trueSolarTime / 4 < 180) {
+    hourAngle = trueSolarTime / 4 + 180;
+  } else {
+    hourAngle = trueSolarTime / 4 - 180;
+  }
+
+  // Solar Zenith Angle (degrees)
+  const latRad = degToRad(lat);
+  const cosZenith = Math.sin(latRad) * Math.sin(declination) +
+                    Math.cos(latRad) * Math.cos(declination) * Math.cos(degToRad(hourAngle));
+
+  // Clamp to [-1, 1] to avoid NaN from acos
+  const clampedCosZenith = Math.max(-1, Math.min(1, cosZenith));
+  const zenithAngle = radToDeg(Math.acos(clampedCosZenith));
+
+  return zenithAngle;
+}
+
+/**
+ * Determine UTC offset based on timestamp and location
+ *
+ * For Australian Eastern time zones:
+ * - AEST (Standard): UTC+10
+ * - AEDT (Daylight Saving): UTC+11
+ *
+ * DST typically runs from first Sunday in October to first Sunday in April
+ *
+ * @param timestamp - Local timestamp
+ * @param longitude - Longitude for rough timezone estimation
+ * @returns UTC offset in hours
+ */
+function determineUTCOffset(timestamp: Date, longitude: number): number {
+  // Use JavaScript's built-in timezone offset
+  // getTimezoneOffset() returns minutes WEST of UTC, so we negate and divide by 60
+  const jsOffset = -timestamp.getTimezoneOffset() / 60;
+
+  // If JavaScript can determine the offset (running in correct timezone), use it
+  // Otherwise, estimate from longitude for Australian Eastern (default to Sydney)
+  if (jsOffset !== 0 || longitude < 140 || longitude > 160) {
+    return jsOffset;
+  }
+
+  // Fallback for Australian Eastern timezone
+  // Rough DST detection (October to April)
+  const month = timestamp.getMonth(); // 0-indexed
+  const isDST = month >= 9 || month <= 2; // Oct-Mar (approximate)
+  return isDST ? 11 : 10;
+}
+
+/**
+ * Calculate solar altitude angle using full NOAA algorithm
+ *
+ * Solar altitude = 90° - solar zenith angle
+ *
+ * @param latitude - Latitude in decimal degrees
+ * @param longitude - Longitude in decimal degrees
+ * @param timestamp - Time of calculation
+ * @returns Solar altitude angle in radians
+ */
+function calculateSolarAltitude(
+  latitude: number,
+  longitude: number,
+  timestamp: Date
+): number {
+  // Determine UTC offset for the timestamp
+  const utcOffset = determineUTCOffset(timestamp, longitude);
+
+  // Calculate solar zenith angle using full NOAA algorithm
+  const zenithDegrees = calculateSolarZenithAngleNOAA(latitude, longitude, timestamp, utcOffset);
+
+  // Convert zenith to altitude (altitude = 90° - zenith)
+  const altitudeDegrees = 90 - zenithDegrees;
+
+  // Convert to radians and ensure non-negative (sun below horizon = 0)
+  return Math.max(0, degToRad(altitudeDegrees));
+}
+
+/**
+ * Physical constants for radiation calculations
+ */
+const RADIATION_CONSTANTS = {
+  /** Globe albedo (black globe absorbs most radiation) */
+  GLOBE_ALBEDO: 0.05,
+  /** Surface albedo (typical ground/grass) */
+  SURFACE_ALBEDO: 0.25,
+} as const;
+
+/**
+ * Calculate globe shortwave radiation using Kong & Huber 2024 formula
+ *
+ * SRg = (1/2)(1 - αg)[(1 - fdir)×SRdown + fdir×SRdown/(2×cos(θ)) + SRup]
+ *
+ * Where:
+ * - αg = globe albedo (0.05 for black globe)
+ * - fdir = direct beam fraction
+ * - SRdown = total downwelling shortwave
+ * - SRup = reflected shortwave from ground
+ * - θ = solar zenith angle
+ *
+ * @param SRdown - Total shortwave radiation (W/m²)
+ * @param directRad - Direct beam radiation (W/m²), optional
+ * @param diffuseRad - Diffuse radiation (W/m²), optional
+ * @param zenithDeg - Solar zenith angle in degrees
+ * @returns Shortwave radiation absorbed by globe (W/m²)
+ */
+function calculateGlobeShortwave(
+  SRdown: number,
+  directRad: number | undefined,
+  diffuseRad: number | undefined,
+  zenithDeg: number
+): number {
+  if (SRdown <= 0) return 0;
+
+  // Calculate direct beam fraction
+  // If direct/diffuse available, use them; otherwise estimate from clearness
+  let fdir: number;
+  if (directRad !== undefined && diffuseRad !== undefined && (directRad + diffuseRad) > 0) {
+    fdir = directRad / (directRad + diffuseRad);
+  } else {
+    // Estimate fdir from zenith angle (clear sky approximation)
+    // Higher sun = more direct; lower sun = more diffuse
+    const cosZ = Math.cos(zenithDeg * Math.PI / 180);
+    fdir = Math.max(0.3, Math.min(0.85, 0.9 * cosZ));
+  }
+
+  // Reflected radiation from ground
+  const SRup = SRdown * RADIATION_CONSTANTS.SURFACE_ALBEDO;
+
+  // Absorption factor: (1/2)(1 - αg)
+  const absorptionFactor = 0.5 * (1 - RADIATION_CONSTANTS.GLOBE_ALBEDO);
+
+  // Handle sun near/below horizon
+  if (zenithDeg >= 85) {
+    // Treat all as diffuse (fdir → 0)
+    return absorptionFactor * (SRdown + SRup);
+  }
+
+  // Normal case: Kong formula
+  const cosTheta = Math.cos(zenithDeg * Math.PI / 180);
+  const diffuseComponent = (1 - fdir) * SRdown;
+  const directComponent = fdir * SRdown / (2 * Math.max(cosTheta, 0.01));
+
+  return absorptionFactor * (diffuseComponent + directComponent + SRup);
+}
+
+/**
+ * Calculate black globe temperature using full Kong & Huber 2024 method
+ *
+ * This solves the heat balance equation for a black globe thermometer using
+ * the proper radiation geometry from Kong & Huber (2024) GeoHealth paper.
  *
  * @param Ta - Air temperature in °C
- * @param SR - Solar radiation in W/m²
+ * @param SR - Total solar radiation in W/m²
  * @param wind - Wind speed in m/s
- * @param latitude - Latitude in decimal degrees (default 0)
+ * @param latitude - Latitude in decimal degrees
+ * @param longitude - Longitude in decimal degrees
  * @param timestamp - Timestamp for solar angle calculation
+ * @param directRad - Direct beam radiation (W/m²), optional
+ * @param diffuseRad - Diffuse radiation (W/m²), optional
  * @returns Black globe temperature in °C
  */
 export function calculateGlobeTemperature(
@@ -223,7 +474,10 @@ export function calculateGlobeTemperature(
   SR: number,
   wind: number,
   latitude: number = 0,
-  timestamp: Date = new Date()
+  longitude: number = 151.2093,
+  timestamp: Date = new Date(),
+  directRad?: number,
+  diffuseRad?: number
 ): number {
   // Handle nighttime conditions (no solar radiation)
   if (SR <= 0) {
@@ -238,18 +492,16 @@ export function calculateGlobeTemperature(
   // Calculate convective heat transfer coefficient
   const h = calculateConvectiveCoefficient(wind);
 
-  // Calculate solar altitude for angle correction
-  const solarAltitude = calculateSolarAltitude(latitude, timestamp);
+  // Calculate solar zenith angle using full NOAA algorithm
+  const utcOffset = determineUTCOffset(timestamp, longitude);
+  const zenithDeg = calculateSolarZenithAngleNOAA(latitude, longitude, timestamp, utcOffset);
 
-  // Effective solar radiation on sphere
-  // A sphere intercepts π*r² but has surface area 4π*r², giving factor of 0.25
-  // Additional factor for angle of incidence
-  const solarFactor = Math.sin(solarAltitude) > 0.1 ? Math.sin(solarAltitude) : 0.1;
-  const effectiveSolar = 0.25 * CONSTANTS.GLOBE_ABSORPTIVITY * SR * solarFactor;
+  // Calculate shortwave radiation on globe using Kong formula
+  const SR_globe = calculateGlobeShortwave(SR, directRad, diffuseRad, zenithDeg);
 
   // Iterative solution for globe temperature
   // Initial guess: air temperature plus solar heating
-  let TgK = TaK + (effectiveSolar / h);
+  let TgK = TaK + (SR_globe / h);
 
   // Newton-Raphson iteration (typically converges in 3-5 iterations)
   for (let i = 0; i < 10; i++) {
@@ -257,7 +509,7 @@ export function calculateGlobeTemperature(
     const radiation = CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.GLOBE_EMISSIVITY *
                      (Math.pow(TgK, 4) - Math.pow(TaK, 4));
     const convection = h * (TgK - TaK);
-    const balance = effectiveSolar - radiation - convection;
+    const balance = SR_globe - radiation - convection;
 
     // Derivative for Newton-Raphson
     const dBalance = -4 * CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.GLOBE_EMISSIVITY *
@@ -300,7 +552,10 @@ export function calculateKongWBGT(params: WBGTParams): WBGTResult {
     relativeHumidity,
     windSpeed,
     solarRadiation,
+    directRadiation,
+    diffuseRadiation,
     latitude,
+    longitude,
     timestamp
   } = params;
 
@@ -328,7 +583,10 @@ export function calculateKongWBGT(params: WBGTParams): WBGTResult {
     solarRadiation,
     windSpeed,
     latitude,
-    timestamp
+    longitude,
+    timestamp,
+    directRadiation,
+    diffuseRadiation
   );
 
   // Calculate WBGT using standard formula

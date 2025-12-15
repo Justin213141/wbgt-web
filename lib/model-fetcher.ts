@@ -23,6 +23,8 @@ export interface NormalizedWeatherData {
   humidity: number[]
   windSpeed: number[]
   solarRadiation: number[]
+  directRadiation: number[]   // Direct beam radiation (W/m²)
+  diffuseRadiation: number[]  // Diffuse radiation (W/m²)
   uvIndex: number[]
   dewPoint: number[]
   apparentTemp: number[]
@@ -48,6 +50,9 @@ export interface OpenMeteoResponse {
     apparent_temperature: number[]
     wind_speed_10m: number[]
     shortwave_radiation: number[]
+    shortwave_radiation_instant?: number[]
+    direct_radiation_instant?: number[]
+    diffuse_radiation_instant?: number[]
     uv_index: number[]
     cloud_cover: number[]
   }
@@ -60,6 +65,9 @@ export interface BomProxyResponse {
     relative_humidity_2m: number[]
     wind_speed_10m: number[]
     shortwave_radiation?: number[]
+    shortwave_radiation_instant?: number[]
+    direct_radiation_instant?: number[]
+    diffuse_radiation_instant?: number[]
     uv_index?: number[]
     dew_point_2m?: number[]
     apparent_temperature?: number[]
@@ -232,6 +240,9 @@ function buildOpenMeteoUrl(modelName: ModelName, lat: number, lon: number): stri
       'apparent_temperature',
       'wind_speed_10m',
       'shortwave_radiation',
+      'shortwave_radiation_instant',
+      'direct_radiation_instant',
+      'diffuse_radiation_instant',
       'uv_index',
       'cloud_cover'
     ].join(','),
@@ -338,11 +349,15 @@ function mergeSupplementalData(
 
   // Create maps of epoch (rounded to hour) -> values for quick lookup
   const radiationMap = new Map<number, number>()
+  const directRadMap = new Map<number, number>()
+  const diffuseRadMap = new Map<number, number>()
   const cloudCoverMap = new Map<number, number>()
 
   supplementalData.hourly.time.forEach((time, index) => {
     const epoch = roundToHour(timestampToEpoch(time))
     radiationMap.set(epoch, supplementalData.hourly.shortwave_radiation_instant[index])
+    directRadMap.set(epoch, supplementalData.hourly.direct_radiation_instant[index])
+    diffuseRadMap.set(epoch, supplementalData.hourly.diffuse_radiation_instant[index])
     if (supplementalData.hourly.cloud_cover) {
       cloudCoverMap.set(epoch, supplementalData.hourly.cloud_cover[index])
     }
@@ -361,6 +376,9 @@ function mergeSupplementalData(
     hourly: {
       ...bomData.hourly,
       shortwave_radiation: mapValues(radiationMap),
+      shortwave_radiation_instant: mapValues(radiationMap),
+      direct_radiation_instant: mapValues(directRadMap),
+      diffuse_radiation_instant: mapValues(diffuseRadMap),
       cloud_cover: mapValues(cloudCoverMap)
       // Note: dew_point_2m and uv_index already exist in BOM data
     }
@@ -385,13 +403,18 @@ export function normalizeModelData(modelName: ModelName, rawData: OpenMeteoRespo
   const times = hourly.time || []
   const length = times.length
 
+  // Prefer instant radiation values over hourly averages for WBGT calculation
+  const solarRad = hourly.shortwave_radiation_instant || hourly.shortwave_radiation || new Array(length).fill(NaN)
+
   return {
     modelName,
     times,
     temperature: hourly.temperature_2m || new Array(length).fill(NaN),
     humidity: hourly.relative_humidity_2m || new Array(length).fill(NaN),
     windSpeed: hourly.wind_speed_10m || new Array(length).fill(NaN),
-    solarRadiation: hourly.shortwave_radiation || new Array(length).fill(NaN),
+    solarRadiation: solarRad,
+    directRadiation: hourly.direct_radiation_instant || new Array(length).fill(NaN),
+    diffuseRadiation: hourly.diffuse_radiation_instant || new Array(length).fill(NaN),
     uvIndex: hourly.uv_index || new Array(length).fill(NaN),
     dewPoint: hourly.dew_point_2m || new Array(length).fill(NaN),
     apparentTemp: hourly.apparent_temperature || new Array(length).fill(NaN),

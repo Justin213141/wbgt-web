@@ -48,6 +48,8 @@ export interface NormalizedWeatherData {
   humidity: number[]
   windSpeed: number[]
   solarRadiation: number[]
+  directRadiation: number[]   // Direct beam radiation (W/m²)
+  diffuseRadiation: number[]  // Diffuse radiation (W/m²)
   uvIndex: number[]
   dewPoint: number[]
   apparentTemp: number[]

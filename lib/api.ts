@@ -113,6 +113,10 @@ export async function fetchObservations(
         }
       }
 
+      // Get direct/diffuse radiation (with NaN handling)
+      const directRad = isNaN(obs.directRadiation) ? undefined : obs.directRadiation
+      const diffuseRad = isNaN(obs.diffuseRadiation) ? undefined : obs.diffuseRadiation
+
       // Calculate WBGT for this observation
       let wbgt = 0
       let apparentTemp = temp
@@ -122,6 +126,8 @@ export async function fetchObservations(
           relativeHumidity: humidity,
           windSpeed: windSpeed,
           solarRadiation: solarRad,
+          directRadiation: directRad,
+          diffuseRadiation: diffuseRad,
           latitude: lat,
           longitude: longitude,
           timestamp: new Date(obs.time)
@@ -286,11 +292,17 @@ export function calculateWBGTFromModel(
   // Calculate WBGT for each hourly data point
   for (let i = 0; i < data.times.length; i++) {
     try {
+      // Get direct/diffuse radiation if available (NaN means unavailable)
+      const directRad = isNaN(data.directRadiation[i]) ? undefined : data.directRadiation[i]
+      const diffuseRad = isNaN(data.diffuseRadiation[i]) ? undefined : data.diffuseRadiation[i]
+
       const params: WBGTParams = {
         temperature: data.temperature[i],
         relativeHumidity: data.humidity[i],
         windSpeed: data.windSpeed[i],
         solarRadiation: data.solarRadiation[i],
+        directRadiation: directRad,
+        diffuseRadiation: diffuseRad,
         latitude: lat,
         longitude: lon,
         timestamp: new Date(data.times[i])

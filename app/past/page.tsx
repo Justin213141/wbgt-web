@@ -29,16 +29,16 @@ export default function PastPage() {
     }
   }
 
-  // Sort observations by timestamp (most recent first) and get last 8 hours
+  // Sort observations by timestamp (most recent first) and get last 16 hours
   const sortedObservations = normalizedObservations.sort((a, b) => {
     const dateA = new Date(a.timestamp || a.localTimestamp || 0)
     const dateB = new Date(b.timestamp || b.localTimestamp || 0)
     return dateB.getTime() - dateA.getTime()
   })
-  const recentData = sortedObservations.slice(0, 8)
+  const recentData = sortedObservations.slice(0, 16)
 
   return (
-    <PageContainer title="Past" description="Past 8 hours of observations">
+    <PageContainer title="Past" description="Past 16 hours of observations">
       {hasError && (
         <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
           Failed to load recent weather data. Please try again later.
