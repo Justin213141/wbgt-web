@@ -101,6 +101,19 @@ export default function TodayPage() {
     const maxHours = 48
     const limitedTimes = times.slice(0, maxHours)
 
+    // Build timestamp lookup maps for each model (timestamp epoch -> array index)
+    // This allows us to align data by actual timestamp instead of array index
+    // Critical for multimodel because BOM starts at current hour while Open-Meteo starts at midnight UTC
+    const modelTimeMaps = successfulModels.map(model => {
+      const timeMap = new Map<number, number>()
+      model.times.forEach((t, i) => {
+        // Round to nearest hour in case of minor timestamp differences
+        const epoch = Math.round(new Date(t).getTime() / 3600000) * 3600000
+        timeMap.set(epoch, i)
+      })
+      return timeMap
+    })
+
     // Arrays to collect range data when multimodel
     const wbgtRangeData: { min: number; max: number }[] = []
     const tempRangeData: { min: number; max: number }[] = []
@@ -110,8 +123,12 @@ export default function TodayPage() {
 
     // Calculate forecast data
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
+      // Get the target timestamp epoch for this forecast hour
+      const targetEpoch = Math.round(new Date(time).getTime() / 3600000) * 3600000
+
       if (multiModelEnabled && successfulModels.length > 1) {
         // MULTIMODEL: Average input variables, then calculate WBGT
+        // Use timestamp-based lookup to align data across models
         const tempValues: number[] = []
         const humidityValues: number[] = []
         const windSpeedValues: number[] = []
@@ -120,15 +137,17 @@ export default function TodayPage() {
         const cloudCoverValues: number[] = []
         const apparentTempValues: number[] = []
 
-        successfulModels.forEach(model => {
-          if (idx < model.times.length) {
-            tempValues.push(model.temperature[idx])
-            humidityValues.push(model.humidity[idx])
-            windSpeedValues.push(model.windSpeed[idx])
-            solarRadValues.push(model.solarRadiation[idx])
-            uvIndexValues.push(model.uvIndex[idx])
-            cloudCoverValues.push(model.cloudCover[idx])
-            apparentTempValues.push(model.apparentTemp[idx])
+        successfulModels.forEach((model, modelIdx) => {
+          // Look up this model's index for the target timestamp
+          const modelIndex = modelTimeMaps[modelIdx].get(targetEpoch)
+          if (modelIndex !== undefined && modelIndex < model.times.length) {
+            tempValues.push(model.temperature[modelIndex])
+            humidityValues.push(model.humidity[modelIndex])
+            windSpeedValues.push(model.windSpeed[modelIndex])
+            solarRadValues.push(model.solarRadiation[modelIndex])
+            uvIndexValues.push(model.uvIndex[modelIndex])
+            cloudCoverValues.push(model.cloudCover[modelIndex])
+            apparentTempValues.push(model.apparentTemp[modelIndex])
           }
         })
 
@@ -162,13 +181,14 @@ export default function TodayPage() {
 
         // Also calculate WBGT for each model to get range
         const modelWbgts: number[] = []
-        successfulModels.forEach(model => {
-          if (idx < model.times.length) {
+        successfulModels.forEach((model, modelIdx) => {
+          const modelIndex = modelTimeMaps[modelIdx].get(targetEpoch)
+          if (modelIndex !== undefined && modelIndex < model.times.length) {
             const modelParams: WBGTParams = {
-              temperature: model.temperature[idx],
-              relativeHumidity: model.humidity[idx],
-              windSpeed: model.windSpeed[idx],
-              solarRadiation: model.solarRadiation[idx],
+              temperature: model.temperature[modelIndex],
+              relativeHumidity: model.humidity[modelIndex],
+              windSpeed: model.windSpeed[modelIndex],
+              solarRadiation: model.solarRadiation[modelIndex],
               latitude: -33.87,
               longitude: 151.21,
               timestamp: new Date(time),
@@ -213,10 +233,11 @@ export default function TodayPage() {
 
         // Calculate dew point for each model to get range
         const modelDewPoints: number[] = []
-        successfulModels.forEach(model => {
-          if (idx < model.times.length) {
-            const temp = model.temperature[idx]
-            const hum = model.humidity[idx]
+        successfulModels.forEach((model, modelIdx) => {
+          const modelIndex = modelTimeMaps[modelIdx].get(targetEpoch)
+          if (modelIndex !== undefined && modelIndex < model.times.length) {
+            const temp = model.temperature[modelIndex]
+            const hum = model.humidity[modelIndex]
             if (!isNaN(temp) && !isNaN(hum) && hum > 0) {
               const alphaModel = (a * temp) / (b + temp) + Math.log(hum / 100)
               const dpModel = (b * alphaModel) / (a - alphaModel)

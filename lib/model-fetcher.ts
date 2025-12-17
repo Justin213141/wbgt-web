@@ -396,11 +396,28 @@ function buildModelUrl(modelName: ModelName, lat: number, lon: number): string {
 // Data Normalization
 // ============================================================================
 
+/**
+ * Normalize timestamp to ISO 8601 UTC format with Z suffix
+ * Open-Meteo returns timestamps without Z suffix (e.g., "2025-12-17T00:00")
+ * BOM returns timestamps with Z suffix (e.g., "2025-12-17T00:00:00Z")
+ * This ensures all timestamps are consistently UTC for proper comparison
+ */
+function normalizeTimestamp(timestamp: string): string {
+  if (timestamp.endsWith('Z')) {
+    return timestamp
+  }
+  // Open-Meteo with timezone=GMT returns UTC times without Z suffix
+  // Add Z to ensure proper UTC parsing
+  return timestamp + ':00Z'
+}
+
 export function normalizeModelData(modelName: ModelName, rawData: OpenMeteoResponse | BomProxyResponse): NormalizedWeatherData {
   const hourly = rawData.hourly
 
   // Handle missing data with fallback arrays
-  const times = hourly.time || []
+  const rawTimes = hourly.time || []
+  // Normalize all timestamps to UTC format with Z suffix
+  const times = rawTimes.map(normalizeTimestamp)
   const length = times.length
 
   // Prefer instant radiation values over hourly averages for WBGT calculation
