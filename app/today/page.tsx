@@ -27,9 +27,26 @@ const MODEL_ID_MAP: Record<string, ModelName> = {
 const MULTIMODEL_IDS = ['bom', 'gfs', 'ecmwf']
 const SINGLE_MODEL_IDS = ['bom']
 
+const STORAGE_KEY = "wbgt-multimodel-enabled"
+
+// Initialize multimodel state from localStorage (runs once on first render)
+function getInitialMultiModelState(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved !== null) {
+      const enabled = JSON.parse(saved)
+      if (typeof enabled === 'boolean') return enabled
+    }
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+  return false
+}
+
 export default function TodayPage() {
-  // Multimodel toggle state - default to false (BOM only)
-  const [multiModelEnabled, setMultiModelEnabled] = useState(false)
+  // Multimodel toggle state - initialized from localStorage
+  const [multiModelEnabled, setMultiModelEnabled] = useState(getInitialMultiModelState)
   const [modelStatus, setModelStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
 
   // Determine which models to fetch based on toggle

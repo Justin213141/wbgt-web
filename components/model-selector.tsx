@@ -18,22 +18,8 @@ export function ModelSelector({
   onMultiModelChange,
   modelStatus = {},
 }: ModelSelectorProps) {
-  // Load from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved !== null) {
-      try {
-        const enabled = JSON.parse(saved)
-        if (typeof enabled === 'boolean') {
-          onMultiModelChange(enabled)
-        }
-      } catch (error) {
-        console.error("Failed to load multimodel setting from localStorage:", error)
-      }
-    }
-  }, []) // Only run on mount
-
   // Save to localStorage whenever setting changes
+  // (Loading is handled by parent component's useState initializer)
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(multiModelEnabled))
   }, [multiModelEnabled])

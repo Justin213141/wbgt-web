@@ -2,6 +2,6 @@
 2:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/64c0a5e3a0354479.js"],"ViewportBoundary"]
 4:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/64c0a5e3a0354479.js"],"MetadataBoundary"]
 5:"$Sreact.suspense"
-0:{"buildId":"XZ-ewPhYogUNwHL1Av-yM","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
+0:{"buildId":"iaQDseikSE75ivTpNpPFr","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
 3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
 6:[["$","title","0",{"children":"WBGT Weather Dashboard"}],["$","meta","1",{"name":"description","content":"Real-time heat stress monitoring and running recommendations"}],["$","meta","2",{"name":"generator","content":"v0.app"}]]
