@@ -25,6 +25,9 @@ export function LocationSettings() {
     // Save to localStorage
     localStorage.setItem("weatherLocation", location)
 
+    // Dispatch custom event to notify pages in the same tab
+    window.dispatchEvent(new Event('locationPreferenceChanged'))
+
     setTimeout(() => {
       setIsLoading(false)
       setIsSaved(true)
@@ -41,6 +44,10 @@ export function LocationSettings() {
           const locationString = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
           setLocation(locationString)
           localStorage.setItem("weatherLocation", locationString)
+
+          // Dispatch custom event to notify pages in the same tab
+          window.dispatchEvent(new Event('locationPreferenceChanged'))
+
           setIsLoading(false)
           setIsSaved(true)
           setTimeout(() => setIsSaved(false), 2000)

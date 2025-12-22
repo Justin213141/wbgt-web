@@ -7,11 +7,38 @@ import useSWR from "swr"
 import { fetchObservations } from "@/lib/api"
 import type { WeatherObservation } from "@/lib/types"
 import { Loader2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { getLocationPreference, type LocationCoordinates } from "@/lib/utils"
 
 export default function PastPage() {
-  const { data: observations, error } = useSWR<WeatherObservation[]>("recent-observations", fetchObservations, {
-    refreshInterval: 60000,
-  })
+  // Location preference state
+  const [location, setLocation] = useState<LocationCoordinates>(getLocationPreference)
+
+  // Load location preference from localStorage on mount and listen for changes
+  useEffect(() => {
+    const updateLocation = () => {
+      setLocation(getLocationPreference())
+    }
+
+    // Listen for storage events (when location changes in settings)
+    window.addEventListener('storage', updateLocation)
+
+    // Also listen for custom event when location is updated in the same tab
+    window.addEventListener('locationPreferenceChanged', updateLocation)
+
+    return () => {
+      window.removeEventListener('storage', updateLocation)
+      window.removeEventListener('locationPreferenceChanged', updateLocation)
+    }
+  }, [])
+
+  const { data: observations, error } = useSWR<WeatherObservation[]>(
+    ['recent-observations', location.lat, location.lon],
+    () => fetchObservations(location.lat, location.lon),
+    {
+      refreshInterval: 60000,
+    }
+  )
 
   const isLoading = !observations
   const hasError = error

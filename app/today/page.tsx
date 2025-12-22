@@ -13,8 +13,8 @@ import { calculateKongWBGT, type WBGTParams } from "@/lib/kong-wbgt"
 import type { WeatherObservation, WeatherForecast, WeatherModelId } from "@/lib/types"
 import { calculateEnsembleStats, type EnsembleDataPoint } from "@/lib/ensemble-utils"
 import { Loader2 } from "lucide-react"
-import { parseApiDate } from "@/lib/utils"
-import { useState, useMemo } from "react"
+import { parseApiDate, getLocationPreference, type LocationCoordinates } from "@/lib/utils"
+import { useState, useMemo, useEffect } from "react"
 
 // Map model IDs from ModelSelector to ModelFetcher format
 const MODEL_ID_MAP: Record<string, ModelName> = {
@@ -49,24 +49,49 @@ export default function TodayPage() {
   const [multiModelEnabled, setMultiModelEnabled] = useState(getInitialMultiModelState)
   const [modelStatus, setModelStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
 
+  // Location preference state
+  const [location, setLocation] = useState<LocationCoordinates>(getLocationPreference)
+
+  // Load location preference from localStorage on mount and listen for changes
+  useEffect(() => {
+    const updateLocation = () => {
+      setLocation(getLocationPreference())
+    }
+
+    // Listen for storage events (when location changes in settings)
+    window.addEventListener('storage', updateLocation)
+
+    // Also listen for custom event when location is updated in the same tab
+    window.addEventListener('locationPreferenceChanged', updateLocation)
+
+    return () => {
+      window.removeEventListener('storage', updateLocation)
+      window.removeEventListener('locationPreferenceChanged', updateLocation)
+    }
+  }, [])
+
   // Determine which models to fetch based on toggle
   const enabledModels = multiModelEnabled ? MULTIMODEL_IDS : SINGLE_MODEL_IDS
 
   // Fetch observations for current conditions (most recent actual data)
-  const { data: observationsData } = useSWR<any>("observations", fetchObservations, {
-    refreshInterval: 60000,
-  })
+  const { data: observationsData } = useSWR<any>(
+    ['observations', location.lat, location.lon],
+    () => fetchObservations(location.lat, location.lon),
+    {
+      refreshInterval: 60000,
+    }
+  )
 
   // Fetch air quality forecast data
   const { data: airQualityData } = useSWR<AirQualityData>(
-    "air-quality-forecast",
-    () => fetchAirQuality(-33.87, 151.21),
+    ['air-quality-forecast', location.lat, location.lon],
+    () => fetchAirQuality(location.lat, location.lon),
     { refreshInterval: 300000 }
   )
 
   // Fetch multi-model forecast data
   const { data: modelResults, error: modelError, isLoading: modelsLoading } = useSWR(
-    ['multi-model-forecast', enabledModels],
+    ['multi-model-forecast', enabledModels, location.lat, location.lon],
     async () => {
       const modelNames = enabledModels.map(id => MODEL_ID_MAP[id]).filter(Boolean) as ModelName[]
 
@@ -78,7 +103,7 @@ export default function TodayPage() {
       setModelStatus(loadingStatus)
 
       // Fetch all models
-      const results = await fetchAllModels(-33.87, 151.21, modelNames)
+      const results = await fetchAllModels(location.lat, location.lon, modelNames)
 
       // Update status for each model
       const newStatus: Record<string, 'loading' | 'success' | 'error'> = {}
@@ -189,8 +214,8 @@ export default function TodayPage() {
           relativeHumidity: avgHumidity,
           windSpeed: avgWindSpeed,
           solarRadiation: avgSolarRad,
-          latitude: -33.87,
-          longitude: 151.21,
+          latitude: location.lat,
+          longitude: location.lon,
           timestamp: new Date(time),
         }
         const wbgtResult = calculateKongWBGT(params)
@@ -206,8 +231,8 @@ export default function TodayPage() {
               relativeHumidity: model.humidity[modelIndex],
               windSpeed: model.windSpeed[modelIndex],
               solarRadiation: model.solarRadiation[modelIndex],
-              latitude: -33.87,
-              longitude: 151.21,
+              latitude: location.lat,
+              longitude: location.lon,
               timestamp: new Date(time),
             }
             const modelResult = calculateKongWBGT(modelParams)
@@ -292,8 +317,8 @@ export default function TodayPage() {
           relativeHumidity: model.humidity[idx],
           windSpeed: model.windSpeed[idx],
           solarRadiation: model.solarRadiation[idx],
-          latitude: -33.87,
-          longitude: 151.21,
+          latitude: location.lat,
+          longitude: location.lon,
           timestamp: new Date(time),
         }
         const wbgtResult = calculateKongWBGT(params)
@@ -430,7 +455,7 @@ export default function TodayPage() {
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
       ranges,
     }
-  }, [modelResults, multiModelEnabled, airQualityData])
+  }, [modelResults, multiModelEnabled, airQualityData, location.lat, location.lon])
 
   // Get the most recent observation for current conditions and calculate worst daily AQI
   let currentData: WeatherObservation | null = null
