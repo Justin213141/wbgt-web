@@ -97,14 +97,17 @@ interface SatelliteRadiationResponse {
 // ============================================================================
 
 const BOM_FORECAST_API = 'https://bom-forecast.justin213141.workers.dev'
-const DEFAULT_BOM_STATION = '95765' // Sydney area
 
 // ============================================================================
 // URL Builders
 // ============================================================================
 
-function buildBomObservationsUrl(station: string = DEFAULT_BOM_STATION): string {
-  return `${BOM_FORECAST_API}/observations?station=${station}`
+/**
+ * Build BOM observations URL with lat/lon
+ * The bom-forecast worker will find the nearest station automatically
+ */
+function buildBomObservationsUrl(lat: number, lon: number): string {
+  return `${BOM_FORECAST_API}/observations?lat=${lat}&lon=${lon}`
 }
 
 /**
@@ -189,10 +192,11 @@ function buildOpenMeteoSolarArchiveUrl(lat: number, lon: number, startDate: stri
 // ============================================================================
 
 /**
- * Fetch BOM observations with station fallback
+ * Fetch BOM observations using coordinates
+ * The bom-forecast worker finds the nearest station automatically
  */
-async function fetchBomObservations(station: string = DEFAULT_BOM_STATION): Promise<BomObservationsResponse | null> {
-  const url = buildBomObservationsUrl(station)
+async function fetchBomObservations(lat: number, lon: number): Promise<BomObservationsResponse | null> {
+  const url = buildBomObservationsUrl(lat, lon)
 
   try {
     const response = await fetch(url, {
@@ -208,6 +212,8 @@ async function fetchBomObservations(station: string = DEFAULT_BOM_STATION): Prom
 
     const data = await response.json()
     if (data.hourly && data.hourly.time && data.hourly.time.length > 0) {
+      // Extract station code from response if available
+      const station = data.station?.code || 'unknown'
       return { ...data, station }
     }
     return null
@@ -536,16 +542,15 @@ export async function fetchObservationsWithFallback(
   lat: number = DEFAULT_LOCATION.lat,
   lon: number = DEFAULT_LOCATION.lon,
   options?: {
-    bomStation?: string
     targetDate?: Date
   }
 ): Promise<ObservationResult> {
-  const station = options?.bomStation || DEFAULT_BOM_STATION
   const targetDate = options?.targetDate || new Date()
 
   // Fetch all data sources in parallel
+  // BOM observations use lat/lon - the worker finds the nearest station automatically
   const [bomData, pressureData, satelliteResult] = await Promise.all([
-    fetchBomObservations(station),
+    fetchBomObservations(lat, lon),
     fetchOpenMeteoPressure(lat, lon),
     fetchSatelliteRadiation(lat, lon)
   ])
@@ -707,7 +712,7 @@ export async function fetchObservationsWithFallback(
       fetchedAt: new Date().toISOString(),
       weatherSource,
       solarSource: solarSource || 'none',
-      bomStation: weatherSource === 'bom' ? station : undefined
+      bomStation: weatherSource === 'bom' ? (bomData as BomObservationsResponse)?.station : undefined
     }
   }
 }
@@ -814,8 +819,7 @@ export async function fetchHistoricalObservations(
 export const ObservationFetcher = {
   fetchObservationsWithFallback,
   fetchHistoricalObservations,
-  DEFAULT_LOCATION,
-  DEFAULT_BOM_STATION
+  DEFAULT_LOCATION
 }
 
 export default ObservationFetcher

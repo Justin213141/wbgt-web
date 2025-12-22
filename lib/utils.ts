@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { findLocationByName } from './locations'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -25,8 +26,8 @@ export interface LocationCoordinates {
 /**
  * Parse location string from localStorage into coordinates
  * Supports formats:
- * - "lat, lon" (e.g., "1.3521, 103.8198")
- * - City names are not geocoded yet, returns default location
+ * - "lat, lon" (e.g., "-33.87, 151.21")
+ * - NSW suburb/city names (e.g., "katoomba", "ulladulla", "parramatta")
  *
  * @param locationString - The location string from localStorage
  * @returns Parsed coordinates or default location
@@ -50,8 +51,13 @@ export function parseLocationString(locationString: string | null): LocationCoor
     }
   }
 
-  // If it's a city name or invalid format, return default
-  // TODO: Add geocoding support for city names
+  // Try to resolve as a suburb/city name
+  const location = findLocationByName(locationString)
+  if (location) {
+    return { lat: location.lat, lon: location.lon }
+  }
+
+  // If it's an unrecognized name, return default
   return DEFAULT_LOCATION
 }
 

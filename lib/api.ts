@@ -52,7 +52,7 @@ const BOM_FORECAST_API = "https://bom-forecast.justin213141.workers.dev"
 export async function fetchObservations(
   latOrKey?: number | string,
   lon?: number,
-  options?: { bomStation?: string; targetDate?: Date }
+  options?: { targetDate?: Date }
 ) {
   // Handle SWR usage where key string is passed as first argument
   // When called by SWR, latOrKey will be the cache key string like "recent-observations"
