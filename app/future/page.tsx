@@ -10,9 +10,10 @@ import { fetchAllModels, type ModelName, getSuccessfulModels } from "@/lib/model
 import { calculateKongWBGT, type WBGTParams } from "@/lib/kong-wbgt"
 import type { WeatherForecast, WeatherModelId } from "@/lib/types"
 import { Loader2, Settings } from "lucide-react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { getLocationPreference, type LocationCoordinates } from "@/lib/utils"
 
 // Map model IDs from ModelSelector to ModelFetcher format
 const MODEL_ID_MAP: Record<string, ModelName> = {
@@ -31,12 +32,33 @@ export default function FuturePage() {
   const [modelStatus, setModelStatus] = useState<Record<string, 'loading' | 'success' | 'error'>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
 
+  // Location preference state
+  const [location, setLocation] = useState<LocationCoordinates>(getLocationPreference)
+
+  // Load location preference from localStorage on mount and listen for changes
+  useEffect(() => {
+    const updateLocation = () => {
+      setLocation(getLocationPreference())
+    }
+
+    // Listen for storage events (when location changes in settings)
+    window.addEventListener('storage', updateLocation)
+
+    // Also listen for custom event when location is updated in the same tab
+    window.addEventListener('locationPreferenceChanged', updateLocation)
+
+    return () => {
+      window.removeEventListener('storage', updateLocation)
+      window.removeEventListener('locationPreferenceChanged', updateLocation)
+    }
+  }, [])
+
   // Determine which models to fetch based on toggle
   const enabledModels = multiModelEnabled ? MULTIMODEL_IDS : SINGLE_MODEL_IDS
 
   // Fetch multi-model forecast data
   const { data: modelResults, error: modelError, isLoading: modelsLoading } = useSWR(
-    ['future-forecast', enabledModels],
+    ['future-forecast', enabledModels, location.lat, location.lon],
     async () => {
       const modelNames = enabledModels.map(id => MODEL_ID_MAP[id]).filter(Boolean) as ModelName[]
 
@@ -46,7 +68,7 @@ export default function FuturePage() {
       })
       setModelStatus(loadingStatus)
 
-      const results = await fetchAllModels(-33.87, 151.21, modelNames)
+      const results = await fetchAllModels(location.lat, location.lon, modelNames)
 
       const newStatus: Record<string, 'loading' | 'success' | 'error'> = {}
       results.forEach(result => {
@@ -128,8 +150,8 @@ export default function FuturePage() {
           relativeHumidity: avgHumidity,
           windSpeed: avgWindSpeed,
           solarRadiation: avgSolarRad,
-          latitude: -33.87,
-          longitude: 151.21,
+          latitude: location.lat,
+          longitude: location.lon,
           timestamp: new Date(time),
         }
         const wbgtResult = calculateKongWBGT(params)
@@ -144,8 +166,8 @@ export default function FuturePage() {
               relativeHumidity: model.humidity[idx],
               windSpeed: model.windSpeed[idx],
               solarRadiation: model.solarRadiation[idx],
-              latitude: -33.87,
-              longitude: 151.21,
+              latitude: location.lat,
+              longitude: location.lon,
               timestamp: new Date(time),
             }
             const modelResult = calculateKongWBGT(modelParams)
@@ -190,8 +212,8 @@ export default function FuturePage() {
           relativeHumidity: model.humidity[idx],
           windSpeed: model.windSpeed[idx],
           solarRadiation: model.solarRadiation[idx],
-          latitude: -33.87,
-          longitude: 151.21,
+          latitude: location.lat,
+          longitude: location.lon,
           timestamp: new Date(time),
         }
         const wbgtResult = calculateKongWBGT(params)
@@ -225,7 +247,7 @@ export default function FuturePage() {
       activeModels: modelIds,
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
     }
-  }, [modelResults, multiModelEnabled])
+  }, [modelResults, multiModelEnabled, location.lat, location.lon])
 
   const isLoading = modelsLoading || (!modelResults && !modelError)
   const hasError = modelError
