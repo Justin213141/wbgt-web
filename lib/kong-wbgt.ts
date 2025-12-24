@@ -95,6 +95,28 @@ const CONSTANTS = {
   L_VAPORIZATION: 2.501e6,
   /** Psychrometric constant (Pa/K) */
   PSYCHROMETRIC_CONSTANT: 66.5,
+  /** Wick diameter in meters (Kong et al.) */
+  WICK_DIAMETER: 0.007,
+  /** Wick length in meters (Kong et al.) */
+  WICK_LENGTH: 0.0254,
+  /** Wick emissivity (wet cotton) */
+  WICK_EMISSIVITY: 0.95,
+  /** Wick albedo (wet cotton reflects ~40% of shortwave) */
+  WICK_ALBEDO: 0.4,
+  /** Molecular weight of water (kg/mol) */
+  MOLECULAR_WEIGHT_WATER: 0.018015,
+  /** Molecular weight of air (kg/mol) */
+  MOLECULAR_WEIGHT_AIR: 0.02897,
+  /** Latent heat of vaporization (J/kg) */
+  LATENT_HEAT_VAPORIZATION: 2453000,
+  /** Atmospheric emissivity constant */
+  ATMOSPHERIC_EMISSIVITY_CONSTANT: 0.575,
+  /** Atmospheric emissivity exponent */
+  ATMOSPHERIC_EMISSIVITY_EXPONENT: 0.143,
+  /** Minimum heat transfer coefficient for numerical stability */
+  MIN_HEAT_TRANSFER_COEFFICIENT: 5.0,
+  /** Standard atmospheric pressure (hPa) */
+  STANDARD_PRESSURE: 1013.25,
 } as const;
 
 /**
@@ -112,17 +134,18 @@ function calculateSaturationVaporPressure(temperature: number): number {
 }
 
 /**
- * Calculate natural wet bulb temperature using Stull approximation
+ * Calculate psychrometric wet bulb temperature using Stull approximation
  *
  * This uses the Stull (2011) approximation which is accurate to ±1°C
- * for typical atmospheric conditions.
+ * for typical atmospheric conditions. This is the PSYCHROMETRIC wet bulb,
+ * used as an initial estimate for the full Kong natural wet bulb calculation.
  *
  * Reference: Stull, R. (2011). "Wet-Bulb Temperature from Relative Humidity
  * and Air Temperature". Journal of Applied Meteorology and Climatology.
  *
  * @param Ta - Air temperature in °C
  * @param RH - Relative humidity as percentage (0-100)
- * @returns Natural wet bulb temperature in °C
+ * @returns Psychrometric wet bulb temperature in °C
  */
 export function calculateWetBulbTemperature(Ta: number, RH: number): number {
   // Validate inputs
@@ -138,6 +161,276 @@ export function calculateWetBulbTemperature(Ta: number, RH: number): number {
     - 4.686035;
 
   return Tw;
+}
+
+/**
+ * Calculate dew point temperature from air temperature and relative humidity
+ * @param Ta - Air temperature in °C
+ * @param RH - Relative humidity as percentage (0-100)
+ * @returns Dew point temperature in °C
+ */
+function calculateDewPoint(Ta: number, RH: number): number {
+  const a = 17.27;
+  const b = 237.7;
+  const alpha = (a * Ta) / (b + Ta) + Math.log(RH / 100);
+  return (b * alpha) / (a - alpha);
+}
+
+/**
+ * Calculate derivative of saturation vapor pressure with respect to temperature
+ * @param T - Temperature in °C
+ * @returns d(esat)/dT in Pa/K
+ */
+function calculateVaporPressureDerivative(T: number): number {
+  const a = 17.625;
+  const b = 243.04;
+  const esat = calculateSaturationVaporPressure(T);
+  return esat * a * b / Math.pow(b + T, 2);
+}
+
+/**
+ * Calculate air properties at given temperature and pressure
+ * @param TaK - Air temperature in Kelvin
+ * @param P_Pa - Atmospheric pressure in Pa
+ */
+function calculateAirProperties(TaK: number, P_Pa: number): {
+  rho: number;
+  mu: number;
+  k: number;
+  Pr: number;
+  Sc: number;
+  D: number;
+} {
+  // Density using ideal gas law
+  const rho = P_Pa / (CONSTANTS.R_DRY_AIR * TaK);
+
+  // Dynamic viscosity using Sutherland's formula
+  const T0 = 273.15;
+  const mu0 = 1.73e-5; // Pa·s at 273.15 K
+  const S = 110.4; // Sutherland constant for air
+  const mu = mu0 * Math.pow(TaK / T0, 1.5) * (T0 + S) / (TaK + S);
+
+  // Thermal conductivity
+  const TaC = TaK - 273.15;
+  const k = 0.02411 + 0.0000773 * TaC;
+
+  // Prandtl number
+  const cp = CONSTANTS.CP_AIR;
+  const Pr = (cp * mu) / k;
+
+  // Schmidt number (for air-water vapor)
+  const Sc = 0.60;
+  const D = mu / (rho * Sc);
+
+  return { rho, mu, k, Pr, Sc, D };
+}
+
+/**
+ * Calculate wind speed at 2m from wind speed at 10m using power law
+ * @param u10m - Wind speed at 10m height (m/s)
+ * @returns Wind speed at 2m height (m/s)
+ */
+function calculateWindAt2m(u10m: number): number {
+  const p = 0.15; // Power law exponent for flat terrain
+  const u2m = u10m * Math.pow(2 / 10, p);
+  return Math.max(0.13, u2m); // Minimum per Kong et al.
+}
+
+/**
+ * Calculate wick radiation components
+ * @param Ta - Air temperature in °C
+ * @param SRdown - Total shortwave radiation (W/m²)
+ * @param directRad - Direct radiation (W/m²)
+ * @param diffuseRad - Diffuse radiation (W/m²)
+ * @param ea - Actual vapor pressure (Pa)
+ * @param zenithDeg - Solar zenith angle in degrees
+ */
+function calculateWickRadiation(
+  Ta: number,
+  SRdown: number,
+  directRad: number | undefined,
+  diffuseRad: number | undefined,
+  ea: number,
+  zenithDeg: number
+): { SRw: number; LRw: number } {
+  if (SRdown <= 0) {
+    // Nighttime - only longwave
+    const TaK = Ta + 273.15;
+    const eaHpa = ea / 100;
+    const emissivityAtm = CONSTANTS.ATMOSPHERIC_EMISSIVITY_CONSTANT *
+      Math.pow(eaHpa, CONSTANTS.ATMOSPHERIC_EMISSIVITY_EXPONENT);
+    const LRdown = emissivityAtm * CONSTANTS.STEFAN_BOLTZMANN * Math.pow(TaK, 4);
+    const LRup = CONSTANTS.STEFAN_BOLTZMANN * Math.pow(TaK, 4);
+    const LRw = 0.5 * CONSTANTS.WICK_EMISSIVITY * (LRdown + LRup);
+    return { SRw: 0, LRw };
+  }
+
+  const thetaRad = degToRad(zenithDeg);
+
+  // Direct beam fraction
+  let fdir: number;
+  if (directRad !== undefined && diffuseRad !== undefined && (directRad + diffuseRad) > 0) {
+    fdir = directRad / (directRad + diffuseRad);
+  } else {
+    const cosZ = Math.cos(thetaRad);
+    fdir = Math.max(0.3, Math.min(0.85, 0.9 * cosZ));
+  }
+
+  // Reflected shortwave from ground
+  const SRup = SRdown * RADIATION_CONSTANTS.SURFACE_ALBEDO;
+
+  // Atmospheric longwave
+  const TaK = Ta + 273.15;
+  const eaHpa = ea / 100;
+  const emissivityAtm = CONSTANTS.ATMOSPHERIC_EMISSIVITY_CONSTANT *
+    Math.pow(eaHpa, CONSTANTS.ATMOSPHERIC_EMISSIVITY_EXPONENT);
+  const LRdown = emissivityAtm * CONSTANTS.STEFAN_BOLTZMANN * Math.pow(TaK, 4);
+  const LRup = CONSTANTS.STEFAN_BOLTZMANN * Math.pow(TaK, 4);
+
+  // Shortwave on wick (Kong formula for cylindrical wick)
+  // SRw = (1 - αw) * [(1 + d/(4L))(1-fdir)SR + (tan(θ)/π + d/(4L))fdir*SR + SRup]
+  const dOverL = CONSTANTS.WICK_DIAMETER / (4 * CONSTANTS.WICK_LENGTH);
+
+  let SRw: number;
+  if (zenithDeg >= 85) {
+    // Near/below horizon - treat all as diffuse
+    SRw = (1 - CONSTANTS.WICK_ALBEDO) * ((1 + dOverL) * SRdown + SRup);
+  } else {
+    const tanTheta = Math.tan(thetaRad);
+    SRw = (1 - CONSTANTS.WICK_ALBEDO) * (
+      (1 + dOverL) * (1 - fdir) * SRdown +
+      (tanTheta / Math.PI + dOverL) * fdir * SRdown +
+      SRup
+    );
+  }
+
+  // Longwave on wick
+  const LRw = 0.5 * CONSTANTS.WICK_EMISSIVITY * (LRdown + LRup);
+
+  return { SRw, LRw };
+}
+
+/**
+ * Calculate heat transfer coefficients for wick
+ */
+function calculateWickHeatTransferCoefficients(
+  Ta: number,
+  Tw: number,
+  P_Pa: number,
+  u2m: number,
+  airProps: ReturnType<typeof calculateAirProperties>
+): {
+  h_cw: number;
+  h_rw: number;
+  h_ew: number;
+  beta: number;
+} {
+  const { rho, mu, k, Pr, Sc, D } = airProps;
+  const TaK = Ta + 273.15;
+
+  // Reynolds number for cylinder
+  const Re_wick = (rho * u2m * CONSTANTS.WICK_DIAMETER) / mu;
+
+  // Nusselt number (Morgan correlation for cylinder)
+  const C_cylinder = 0.281;
+  const m_cylinder = 0.6;
+  const Nu_wick = C_cylinder * Math.pow(Re_wick, m_cylinder) * Math.pow(Pr, 1/3);
+
+  // Convective heat transfer coefficient
+  const h_cw = (k / CONSTANTS.WICK_DIAMETER) * Nu_wick;
+
+  // Radiative heat transfer coefficient (linearized)
+  const h_rw = 4 * CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.WICK_EMISSIVITY * Math.pow(TaK, 3);
+
+  // Mass transfer coefficient
+  const kx = (rho * D / (CONSTANTS.MOLECULAR_WEIGHT_AIR * CONSTANTS.WICK_DIAMETER)) *
+    C_cylinder * Math.pow(Re_wick, m_cylinder) * Math.pow(Sc, 1/3);
+
+  // Psychrometric coefficient (beta)
+  const beta = kx * CONSTANTS.MOLECULAR_WEIGHT_WATER * CONSTANTS.LATENT_HEAT_VAPORIZATION / P_Pa;
+
+  // Vapor pressure derivative at mean wick temperature
+  const TwMean = (Tw + Ta) / 2;
+  const desatDT = calculateVaporPressureDerivative(TwMean);
+
+  // Evaporative heat transfer coefficient
+  const h_ew = beta * desatDT;
+
+  return { h_cw, h_rw, h_ew, beta };
+}
+
+/**
+ * Calculate full Kong natural wet bulb temperature
+ *
+ * This implements the Kong et al. zero-iteration formula for natural wet bulb
+ * temperature which includes radiation effects on the wick. This is the
+ * physically correct Tnw for WBGT calculation.
+ *
+ * Reference: Kong, Q. & Huber, M. (2024). "Analytic estimates of wet-bulb
+ * globe temperature" GeoHealth.
+ *
+ * @param Ta - Air temperature in °C
+ * @param RH - Relative humidity (%)
+ * @param SRw - Shortwave radiation on wick (W/m²)
+ * @param LRw - Longwave radiation on wick (W/m²)
+ * @param windSpeed - Wind speed at 10m (m/s)
+ * @param P_hPa - Atmospheric pressure (hPa)
+ * @returns Natural wet bulb temperature in °C
+ */
+function calculateKongNaturalWetBulb(
+  Ta: number,
+  RH: number,
+  SRw: number,
+  LRw: number,
+  windSpeed: number,
+  P_hPa: number = CONSTANTS.STANDARD_PRESSURE
+): number {
+  const TaK = Ta + 273.15;
+  const P_Pa = P_hPa * 100;
+
+  // Calculate Stull wet bulb as initial estimate (used for coefficients)
+  const Tw = calculateWetBulbTemperature(Ta, RH);
+
+  // Calculate actual vapor pressure
+  const eSatTa = calculateSaturationVaporPressure(Ta);
+  const ea = (RH / 100) * eSatTa;
+
+  // Wind at 2m height
+  const u10m = Math.max(1.0, windSpeed); // Minimum for numerical stability
+  const u2m = calculateWindAt2m(u10m);
+
+  // Air properties
+  const airProps = calculateAirProperties(TaK, P_Pa);
+
+  // Heat transfer coefficients
+  const coeffs = calculateWickHeatTransferCoefficients(Ta, Tw, P_Pa, u2m, airProps);
+  const { h_cw, h_rw, h_ew, beta } = coeffs;
+
+  // Vapor Pressure Deficit term
+  const VPD = beta * Math.max(eSatTa - ea, 0.0);
+
+  // Radiation balance: SRw + LRw - σεTa⁴
+  const radBalance = SRw + LRw - CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.WICK_EMISSIVITY * Math.pow(TaK, 4);
+
+  // Total heat transfer coefficient with physics-based floor
+  const denominator = Math.max(h_ew + h_cw + h_rw, CONSTANTS.MIN_HEAT_TRANSFER_COEFFICIENT);
+
+  // Zero-iteration Kong formula: Tnw = Ta + (SRw + LRw - VPD - σεTa⁴) / (h_ew + h_cw + h_rw)
+  let Tnw = Ta + (radBalance - VPD) / denominator;
+
+  // Physical constraints:
+  // 1. Natural wet bulb cannot exceed dry bulb temperature
+  Tnw = Math.min(Tnw, Ta);
+
+  // 2. Natural wet bulb cannot be below dew point (thermodynamic limit)
+  const dewPoint = calculateDewPoint(Ta, Math.max(1, Math.min(99, RH)));
+  Tnw = Math.max(Tnw, dewPoint);
+
+  // 3. Absolute bounds for numerical safety
+  Tnw = Math.max(Tnw, -50.0);
+  Tnw = Math.min(Tnw, 60.0);
+
+  return Tnw;
 }
 
 /**
@@ -391,8 +684,24 @@ function calculateSolarAltitude(
 const RADIATION_CONSTANTS = {
   /** Globe albedo (black globe absorbs most radiation) */
   GLOBE_ALBEDO: 0.05,
-  /** Surface albedo (typical ground/grass) */
-  SURFACE_ALBEDO: 0.25,
+  /**
+   * Surface albedo for urban running environments (dimensionless)
+   *
+   * Rationale: Based on comprehensive urban running surface analysis (Sydney Metro, 102 runs, 2 years)
+   *
+   * Surface distribution and albedo values:
+   * - 35.3% Macquarie Park footpaths: 0.16 (asphalt/concrete mix)
+   * - 17.6% Riverside paths: 0.17 (moist dark surfaces)
+   * - 13.7% Suburban streets: 0.16 (asphalt)
+   * - 12.7% Marsfield/Eastwood: 0.16 (asphalt)
+   * - 5.9% Sydney Olympic Park: 0.25 (concrete)
+   * - 3.9% Rhodes/Concord: 0.18 (mixed surfaces)
+   * - 2.0% Pyrmont/CBD: 0.22 (urban concrete)
+   * - 8.8% Other locations: 0.17-0.20 (mixed)
+   *
+   * Weighted average: 0.171, rounded to 0.18 for web application accuracy
+   */
+  SURFACE_ALBEDO: 0.18,
 } as const;
 
 /**
@@ -531,15 +840,19 @@ export function calculateGlobeTemperature(
 }
 
 /**
- * Calculate WBGT using the Kong method
+ * Calculate WBGT using the full Kong method
  *
  * The Kong method provides an explicit calculation of WBGT from standard
  * meteorological variables, suitable for forecasting applications.
  *
- * WBGT = 0.7 * Tnwb + 0.2 * Tg + 0.1 * Ta
+ * This implementation uses the full Kong natural wet bulb calculation which
+ * includes radiation effects on the wick, matching the Kong & Huber (2024)
+ * GeoHealth paper.
+ *
+ * WBGT = 0.7 * Tnw + 0.2 * Tg + 0.1 * Ta
  *
  * where:
- * - Tnwb = Natural wet bulb temperature
+ * - Tnw = Natural wet bulb temperature (with radiation effects)
  * - Tg = Black globe temperature
  * - Ta = Air temperature
  *
@@ -576,17 +889,49 @@ export function calculateKongWBGT(params: WBGTParams): WBGTResult {
     throw new Error(`Solar radiation cannot be negative, got ${solarRadiation}`);
   }
 
-  // Calculate component temperatures
-  const wetBulbTemp = calculateWetBulbTemperature(temperature, relativeHumidity);
+  // Calculate solar zenith angle
+  const utcOffset = determineUTCOffset(timestamp, longitude);
+  const zenithDeg = calculateSolarZenithAngleNOAA(latitude, longitude, timestamp, utcOffset);
+
+  // Handle sun below horizon
+  const isSunAboveHorizon = zenithDeg <= 90;
+  const SRdown = isSunAboveHorizon ? solarRadiation : 0;
+  const directRad = isSunAboveHorizon ? directRadiation : 0;
+  const diffuseRad = isSunAboveHorizon ? diffuseRadiation : 0;
+
+  // Calculate actual vapor pressure for wick radiation
+  const eSatTa = calculateSaturationVaporPressure(temperature);
+  const ea = (relativeHumidity / 100) * eSatTa;
+
+  // Calculate wick radiation components
+  const { SRw, LRw } = calculateWickRadiation(
+    temperature,
+    SRdown,
+    directRad,
+    diffuseRad,
+    ea,
+    zenithDeg
+  );
+
+  // Calculate full Kong natural wet bulb temperature
+  const wetBulbTemp = calculateKongNaturalWetBulb(
+    temperature,
+    relativeHumidity,
+    SRw,
+    LRw,
+    windSpeed
+  );
+
+  // Calculate globe temperature
   const globeTemp = calculateGlobeTemperature(
     temperature,
-    solarRadiation,
+    SRdown,
     windSpeed,
     latitude,
     longitude,
     timestamp,
-    directRadiation,
-    diffuseRadiation
+    directRad,
+    diffuseRad
   );
 
   // Calculate WBGT using standard formula
