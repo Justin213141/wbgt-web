@@ -85,7 +85,7 @@ const CONSTANTS = {
   GLOBE_EMISSIVITY: 0.95,
   /** Absorptivity of black globe for solar radiation */
   GLOBE_ABSORPTIVITY: 0.95,
-  /** Standard globe diameter in meters */
+  /** Globe diameter in meters (ISO 7243 standard 150mm black globe) */
   GLOBE_DIAMETER: 0.15,
   /** Specific heat of air at constant pressure (J/kg/K) */
   CP_AIR: 1005,
@@ -763,6 +763,112 @@ function calculateGlobeShortwave(
 }
 
 /**
+ * Calculate globe radiation components (shortwave and longwave)
+ *
+ * @param Ta - Air temperature in °C
+ * @param SRdown - Total shortwave radiation (W/m²)
+ * @param ea - Actual vapor pressure (Pa)
+ * @param directRad - Direct radiation (W/m²)
+ * @param diffuseRad - Diffuse radiation (W/m²)
+ * @param zenithDeg - Solar zenith angle in degrees
+ * @returns Object with SRg and LRg
+ */
+function calculateGlobeRadiation(
+  Ta: number,
+  SRdown: number,
+  ea: number,
+  directRad: number | undefined,
+  diffuseRad: number | undefined,
+  zenithDeg: number
+): { SRg: number; LRg: number } {
+  const TaK = Ta + 273.15;
+  const eaHpa = ea / 100;
+
+  // Atmospheric emissivity (Brutsaert formula)
+  const emissivityAtm = CONSTANTS.ATMOSPHERIC_EMISSIVITY_CONSTANT *
+    Math.pow(eaHpa, CONSTANTS.ATMOSPHERIC_EMISSIVITY_EXPONENT);
+
+  // Longwave radiation components
+  const LRdown = emissivityAtm * CONSTANTS.STEFAN_BOLTZMANN * Math.pow(TaK, 4);
+  const LRup = CONSTANTS.STEFAN_BOLTZMANN * Math.pow(TaK, 4);
+
+  // Longwave on globe: LRg = 0.5 * εg * (LRdown + LRup)
+  const LRg = 0.5 * CONSTANTS.GLOBE_EMISSIVITY * (LRdown + LRup);
+
+  // Shortwave on globe
+  const SRg = calculateGlobeShortwave(SRdown, directRad, diffuseRad, zenithDeg);
+
+  return { SRg, LRg };
+}
+
+/**
+ * Calculate globe heat transfer coefficients
+ *
+ * @param Ta - Air temperature in °C
+ * @param u2m - Wind speed at 2m (m/s)
+ * @returns Object with h_cg and h_rg
+ */
+function calculateGlobeHeatTransferCoefficients(
+  Ta: number,
+  u2m: number
+): { h_cg: number; h_rg: number } {
+  const TaK = Ta + 273.15;
+  const P_Pa = CONSTANTS.STANDARD_PRESSURE * 100;
+
+  // Air properties
+  const airProps = calculateAirProperties(TaK, P_Pa);
+  const { rho, mu, k, Pr } = airProps;
+
+  // Reynolds number for sphere
+  const Re_globe = (rho * u2m * CONSTANTS.GLOBE_DIAMETER) / mu;
+
+  // Nusselt number (Churchill correlation for sphere)
+  const Nu_globe = 2.0 + 0.6 * Math.pow(Re_globe, 0.5) * Math.pow(Pr, 1/3);
+
+  // Convective heat transfer coefficient
+  const h_cg = (k / CONSTANTS.GLOBE_DIAMETER) * Nu_globe;
+
+  // Radiative heat transfer coefficient (linearized)
+  const h_rg = 4 * CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.GLOBE_EMISSIVITY * Math.pow(TaK, 3);
+
+  return { h_cg, h_rg };
+}
+
+/**
+ * Calculate black globe temperature using Kong & Huber zero-iteration method
+ *
+ * Implements the Kong et al. explicit formula:
+ * Tg = Ta + (SRg + LRg - σεTa⁴) / (h_cg + h_rg)
+ *
+ * @param Ta - Air temperature in °C
+ * @param SRg - Shortwave radiation on globe (W/m²)
+ * @param LRg - Longwave radiation on globe (W/m²)
+ * @param h_cg - Convective heat transfer coefficient (W/m²K)
+ * @param h_rg - Radiative heat transfer coefficient (W/m²K)
+ * @returns Black globe temperature in °C
+ */
+function calculateKongBlackGlobe(
+  Ta: number,
+  SRg: number,
+  LRg: number,
+  h_cg: number,
+  h_rg: number
+): number {
+  const TaK = Ta + 273.15;
+
+  // Numerator: shortwave + longwave - outgoing longwave at Ta
+  const numerator = SRg + LRg - CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.GLOBE_EMISSIVITY * Math.pow(TaK, 4);
+
+  // Denominator: total heat transfer coefficient with physics-based floor
+  const denominator = Math.max(h_cg + h_rg, 5.0);
+
+  // Zero-iteration formula
+  const TgK = TaK + numerator / denominator;
+
+  return TgK - 273.15;
+}
+
+/**
  * Calculate black globe temperature using full Kong & Huber 2024 method
  *
  * This solves the heat balance equation for a black globe thermometer using
@@ -776,6 +882,7 @@ function calculateGlobeShortwave(
  * @param timestamp - Timestamp for solar angle calculation
  * @param directRad - Direct beam radiation (W/m²), optional
  * @param diffuseRad - Diffuse radiation (W/m²), optional
+ * @param RH - Relative humidity (%), optional for longwave calculation
  * @returns Black globe temperature in °C
  */
 export function calculateGlobeTemperature(
@@ -786,57 +893,42 @@ export function calculateGlobeTemperature(
   longitude: number = 151.2093,
   timestamp: Date = new Date(),
   directRad?: number,
-  diffuseRad?: number
+  diffuseRad?: number,
+  RH: number = 50
 ): number {
   // Handle nighttime conditions (no solar radiation)
   if (SR <= 0) {
-    // At night, globe temperature approaches air temperature
-    // With slight elevation due to longwave radiation
-    return Ta + 0.5;
+    // At night, still calculate with longwave radiation
+    const TaK = Ta + 273.15;
+    const eSatTa = calculateSaturationVaporPressure(Ta);
+    const ea = (RH / 100) * eSatTa;
+
+    const u2m = calculateWindAt2m(Math.max(1.0, wind));
+    const { h_cg, h_rg } = calculateGlobeHeatTransferCoefficients(Ta, u2m);
+    const { LRg } = calculateGlobeRadiation(Ta, 0, ea, 0, 0, 90);
+
+    return calculateKongBlackGlobe(Ta, 0, LRg, h_cg, h_rg);
   }
-
-  // Convert air temperature to Kelvin
-  const TaK = Ta + 273.15;
-
-  // Calculate convective heat transfer coefficient
-  const h = calculateConvectiveCoefficient(wind);
 
   // Calculate solar zenith angle using full NOAA algorithm
   const utcOffset = determineUTCOffset(timestamp, longitude);
   const zenithDeg = calculateSolarZenithAngleNOAA(latitude, longitude, timestamp, utcOffset);
 
-  // Calculate shortwave radiation on globe using Kong formula
-  const SR_globe = calculateGlobeShortwave(SR, directRad, diffuseRad, zenithDeg);
+  // Calculate vapor pressure for longwave calculation
+  const eSatTa = calculateSaturationVaporPressure(Ta);
+  const ea = (RH / 100) * eSatTa;
 
-  // Iterative solution for globe temperature
-  // Initial guess: air temperature plus solar heating
-  let TgK = TaK + (SR_globe / h);
+  // Calculate wind at 2m
+  const u2m = calculateWindAt2m(Math.max(1.0, wind));
 
-  // Newton-Raphson iteration (typically converges in 3-5 iterations)
-  for (let i = 0; i < 10; i++) {
-    // Heat balance equation
-    const radiation = CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.GLOBE_EMISSIVITY *
-                     (Math.pow(TgK, 4) - Math.pow(TaK, 4));
-    const convection = h * (TgK - TaK);
-    const balance = SR_globe - radiation - convection;
+  // Calculate heat transfer coefficients
+  const { h_cg, h_rg } = calculateGlobeHeatTransferCoefficients(Ta, u2m);
 
-    // Derivative for Newton-Raphson
-    const dBalance = -4 * CONSTANTS.STEFAN_BOLTZMANN * CONSTANTS.GLOBE_EMISSIVITY *
-                     Math.pow(TgK, 3) - h;
+  // Calculate radiation components
+  const { SRg, LRg } = calculateGlobeRadiation(Ta, SR, ea, directRad, diffuseRad, zenithDeg);
 
-    // Update estimate
-    const TgK_new = TgK - balance / dBalance;
-
-    // Check convergence
-    if (Math.abs(TgK_new - TgK) < 0.01) {
-      break;
-    }
-
-    TgK = TgK_new;
-  }
-
-  // Convert back to Celsius
-  return TgK - 273.15;
+  // Calculate globe temperature using Kong zero-iteration formula
+  return calculateKongBlackGlobe(Ta, SRg, LRg, h_cg, h_rg);
 }
 
 /**
@@ -931,7 +1023,8 @@ export function calculateKongWBGT(params: WBGTParams): WBGTResult {
     longitude,
     timestamp,
     directRad,
-    diffuseRad
+    diffuseRad,
+    relativeHumidity
   );
 
   // Calculate WBGT using standard formula
