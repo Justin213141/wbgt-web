@@ -423,12 +423,22 @@ export function normalizeModelData(modelName: ModelName, rawData: OpenMeteoRespo
   // Prefer instant radiation values over hourly averages for WBGT calculation
   const solarRad = hourly.shortwave_radiation_instant || hourly.shortwave_radiation || new Array(length).fill(NaN)
 
+  // Wind speed unit conversion:
+  // - Open-Meteo models (ECMWF, GFS) return wind_speed_10m in km/h by default
+  // - BOM worker already converts to m/s
+  // We need to convert Open-Meteo km/h to m/s for consistent WBGT calculation
+  const rawWindSpeed = hourly.wind_speed_10m || new Array(length).fill(NaN)
+  const isBomModel = modelName === 'bom_access'
+  const windSpeed = isBomModel
+    ? rawWindSpeed  // BOM already provides m/s
+    : rawWindSpeed.map((v: number) => isNaN(v) ? NaN : v / 3.6)  // Convert km/h to m/s
+
   return {
     modelName,
     times,
     temperature: hourly.temperature_2m || new Array(length).fill(NaN),
     humidity: hourly.relative_humidity_2m || new Array(length).fill(NaN),
-    windSpeed: hourly.wind_speed_10m || new Array(length).fill(NaN),
+    windSpeed,
     solarRadiation: solarRad,
     directRadiation: hourly.direct_radiation_instant || new Array(length).fill(NaN),
     diffuseRadiation: hourly.diffuse_radiation_instant || new Array(length).fill(NaN),
