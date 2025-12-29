@@ -654,6 +654,7 @@ export default function TodayPage() {
       weather_source: undefined, // Forecast data, not observations
       solar_source: undefined,
       station: undefined,
+      station_name: undefined,
     } as WeatherObservation
   })() : null
 

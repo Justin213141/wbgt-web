@@ -154,6 +154,7 @@ export async function fetchObservations(
         solar_source: obs.source.solar,
         pressure_source: obs.source.pressure,
         station: result.metadata.bomStation,
+        station_name: result.metadata.bomStationName,
         wbgt,
         apparent_temp: apparentTemp,
         cloud_cover: cloudCover,

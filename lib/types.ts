@@ -16,6 +16,7 @@ export interface WeatherObservation {
   weather_source?: string // source of weather data (bom, openmeteo_forecast, openmeteo_archive)
   solar_source?: string // source of solar radiation data
   station?: string // BOM station code if applicable
+  station_name?: string // BOM station name if applicable
 }
 
 export interface WeatherForecast extends WeatherObservation {

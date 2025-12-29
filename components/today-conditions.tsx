@@ -46,6 +46,7 @@ interface TodayConditionsProps {
     weather_source?: string
     solar_source?: string
     station?: string
+    station_name?: string
   }
   forecastSummary?: DaySummary
   tomorrowSummary?: DaySummary
@@ -154,7 +155,7 @@ export function TodayConditions({ data, forecastSummary, tomorrowSummary, wbgtRa
                 </div>
                 {(data.weather_source || data.station) && (
                   <div className="text-xs text-gray-500 mt-0.5">
-                    {data.weather_source === 'bom' && data.station && `SOURCE: BOM ${data.station}`}
+                    {data.weather_source === 'bom' && (data.station_name || data.station) && `SOURCE: BOM ${data.station_name || data.station}`}
                     {data.weather_source === 'openmeteo_forecast' && 'SOURCE: Open-Meteo Forecast'}
                     {data.weather_source === 'openmeteo_archive' && 'SOURCE: Open-Meteo Archive'}
                     {!data.weather_source && 'SOURCE: Forecast'}
