@@ -586,8 +586,10 @@ function calculateSolarZenithAngleNOAA(
     1.25 * eccent ** 2 * Math.sin(2 * degToRad(geomMeanAnom))
   );
 
-  // Clock hour (fractional)
-  const clockHour = timestamp.getHours() + timestamp.getMinutes() / 60 + timestamp.getSeconds() / 3600;
+  // Clock hour (fractional) - must be in LOCAL time for the location
+  // CRITICAL FIX: Calculate local hour from UTC, don't use .getHours() which uses runtime timezone
+  const utcHour = timestamp.getUTCHours() + timestamp.getUTCMinutes() / 60 + timestamp.getUTCSeconds() / 3600;
+  const clockHour = (utcHour + utcOffset + 24) % 24; // Add utcOffset to convert UTC to local time
 
   // True Solar Time (minutes)
   // CRITICAL: Include timezone offset correction (-60 * utcOffset)
