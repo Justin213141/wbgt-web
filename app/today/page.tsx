@@ -475,7 +475,19 @@ export default function TodayPage() {
         const dateB = parseApiDate(b.timestamp || b.localTimestamp || "")
         return dateB.getTime() - dateA.getTime()
       })
-      currentData = sorted[0]
+
+      // Only use the most recent observation if it's fresh (within last 3 hours)
+      // Otherwise, fall back to forecast data which is more current
+      const mostRecent = sorted[0]
+      const mostRecentTime = parseApiDate(mostRecent.timestamp || mostRecent.localTimestamp || "")
+      const now = new Date()
+      const ageHours = (now.getTime() - mostRecentTime.getTime()) / (1000 * 60 * 60)
+
+      // Use observation only if it's less than 3 hours old
+      if (ageHours < 3) {
+        currentData = mostRecent
+      }
+      // If observation is stale, currentData remains null and we'll use forecast data instead
 
       // Calculate worst (highest) AQI from today's observations with timestamp
       // Limited to 7am-10pm as AQI outside these hours is less relevant
@@ -639,6 +651,10 @@ export default function TodayPage() {
       esi: f.esi,
       apparent_temp: f.apparent_temp,
       rain_chance: f.rain_chance,
+      weather_source: undefined, // Forecast data, not observations
+      solar_source: undefined,
+      station: undefined,
+      station_name: undefined,
     } as WeatherObservation
   })() : null
 

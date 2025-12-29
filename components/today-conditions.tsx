@@ -43,6 +43,10 @@ interface TodayConditionsProps {
     air_quality?: number
     timestamp?: string
     localTimestamp?: string
+    weather_source?: string
+    solar_source?: string
+    station?: string
+    station_name?: string
   }
   forecastSummary?: DaySummary
   tomorrowSummary?: DaySummary
@@ -140,13 +144,25 @@ export function TodayConditions({ data, forecastSummary, tomorrowSummary, wbgtRa
           className="p-6"
           style={{ backgroundColor: zoneColors?.bg || '#f9fafb' }}
         >
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-lg font-semibold" style={{ color: zoneColors?.text || '#374151' }}>
-              Now
-            </span>
-            <span className="text-xs text-gray-500">
-              UPDATED {updateTime}
-            </span>
+          <div className="mb-4">
+            <div className="flex items-center justify-between">
+              <span className="text-lg font-semibold" style={{ color: zoneColors?.text || '#374151' }}>
+                Now
+              </span>
+              <div className="text-right">
+                <div className="text-xs text-gray-500">
+                  UPDATED {updateTime}
+                </div>
+                {(data.weather_source || data.station) && (
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {data.weather_source === 'bom' && (data.station_name || data.station) && `SOURCE: BOM ${data.station_name || data.station}`}
+                    {data.weather_source === 'openmeteo_forecast' && 'SOURCE: Open-Meteo Forecast'}
+                    {data.weather_source === 'openmeteo_archive' && 'SOURCE: Open-Meteo Archive'}
+                    {!data.weather_source && 'SOURCE: Forecast'}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* WBGT Hero */}

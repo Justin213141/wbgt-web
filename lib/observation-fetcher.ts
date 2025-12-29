@@ -48,6 +48,7 @@ export interface ObservationResult {
     weatherSource: string
     solarSource: string
     bomStation?: string
+    bomStationName?: string
   }
 }
 
@@ -60,7 +61,10 @@ interface BomObservationsResponse {
     surface_pressure?: number[]
     dew_point_2m?: number[]
   }
-  station?: string
+  station?: {
+    code: string
+    name: string
+  }
 }
 
 interface OpenMeteoHourlyResponse {
@@ -212,9 +216,8 @@ async function fetchBomObservations(lat: number, lon: number): Promise<BomObserv
 
     const data = await response.json()
     if (data.hourly && data.hourly.time && data.hourly.time.length > 0) {
-      // Extract station code from response if available
-      const station = data.station?.code || 'unknown'
-      return { ...data, station }
+      // Keep full station object (code and name)
+      return data
     }
     return null
   } catch (error) {
@@ -712,7 +715,8 @@ export async function fetchObservationsWithFallback(
       fetchedAt: new Date().toISOString(),
       weatherSource,
       solarSource: solarSource || 'none',
-      bomStation: weatherSource === 'bom' ? (bomData as BomObservationsResponse)?.station : undefined
+      bomStation: weatherSource === 'bom' ? (bomData as BomObservationsResponse)?.station?.code : undefined,
+      bomStationName: weatherSource === 'bom' ? (bomData as BomObservationsResponse)?.station?.name : undefined
     }
   }
 }
