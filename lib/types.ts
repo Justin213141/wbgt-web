@@ -13,6 +13,9 @@ export interface WeatherObservation {
   apparent_temp: number // Celsius (feels like)
   rain_chance: number // percentage
   air_quality?: number // optional, only if it's a factor
+  weather_source?: string // source of weather data (bom, openmeteo_forecast, openmeteo_archive)
+  solar_source?: string // source of solar radiation data
+  station?: string // BOM station code if applicable
 }
 
 export interface WeatherForecast extends WeatherObservation {

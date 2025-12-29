@@ -651,6 +651,9 @@ export default function TodayPage() {
       esi: f.esi,
       apparent_temp: f.apparent_temp,
       rain_chance: f.rain_chance,
+      weather_source: undefined, // Forecast data, not observations
+      solar_source: undefined,
+      station: undefined,
     } as WeatherObservation
   })() : null
 
