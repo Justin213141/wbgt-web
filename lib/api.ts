@@ -91,7 +91,10 @@ export async function fetchObservations(
       const pressure = isNaN(obs.pressure) ? 1013 : obs.pressure
 
       // Estimate cloud cover from solar radiation (BOM observations don't include it)
-      const hour = new Date(obs.time).getHours()
+      // Extract hour from timestamp string to avoid timezone conversion issues
+      // obs.time format: "2026-01-14T16:30:00+11:00" or "2026-01-14T16:30:00"
+      const hourMatch = obs.time.match(/T(\d{2}):/);
+      const hour = hourMatch ? parseInt(hourMatch[1], 10) : new Date(obs.time).getHours();
       const isNight = hour < 6 || hour > 19
       let cloudCover = 50 // Default
       if (!isNight && solarRad > 0) {

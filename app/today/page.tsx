@@ -13,7 +13,7 @@ import { calculateKongWBGT, type WBGTParams } from "@/lib/kong-wbgt"
 import type { WeatherObservation, WeatherForecast, WeatherModelId } from "@/lib/types"
 import { calculateEnsembleStats, type EnsembleDataPoint } from "@/lib/ensemble-utils"
 import { Loader2 } from "lucide-react"
-import { parseApiDate, getLocationPreference, type LocationCoordinates } from "@/lib/utils"
+import { parseApiDate, getLocationPreference, getSydneyHour, type LocationCoordinates } from "@/lib/utils"
 import { useState, useMemo, useEffect } from "react"
 
 // Map model IDs from ModelSelector to ModelFetcher format
@@ -496,7 +496,7 @@ export default function TodayPage() {
       const todayAqiObs = observations
         .filter(obs => {
           const obsDate = parseApiDate(obs.timestamp || obs.localTimestamp || "")
-          const hour = obsDate.getHours()
+          const hour = getSydneyHour(obs.timestamp || obs.localTimestamp || "")
           return obsDate >= todayStart &&
                  hour >= 7 && hour < 22 && // 7am to 10pm
                  obs.air_quality !== undefined && obs.air_quality !== null
@@ -572,7 +572,7 @@ export default function TodayPage() {
 
     const aqiForecasts = tomorrowForecasts.filter(f => {
       if (f.air_quality === undefined || f.air_quality === null) return false
-      const hour = parseApiDate(f.timestamp || f.localTimestamp || '').getHours()
+      const hour = getSydneyHour(f.timestamp || f.localTimestamp || '')
       return hour >= 7 && hour < 22 // 7am to 10pm
     })
     if (aqiForecasts.length > 0) {

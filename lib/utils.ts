@@ -101,3 +101,53 @@ export function parseApiDate(dateString: string): Date {
   // Fallback to standard Date parsing
   return new Date(dateString)
 }
+
+/**
+ * Extract the local hour from a timestamp string, accounting for timezone
+ * This is needed because JavaScript's getHours() returns the browser's local hour,
+ * not the hour embedded in the timestamp.
+ *
+ * Supports formats:
+ * - "2026-01-14T16:30:00+11:00" (with offset) → extracts 16
+ * - "2026-01-14T05:00:00Z" (UTC) → converts to Sydney time
+ * - "2026-01-14T16:30:00" (no timezone) → extracts 16
+ *
+ * @param timestamp - ISO timestamp string
+ * @returns Hour in Sydney local time (0-23)
+ */
+export function getSydneyHour(timestamp: string): number {
+  if (!timestamp) return new Date().getHours()
+
+  // Try to extract hour from timestamp string (format: ...THH:MM...)
+  const hourMatch = timestamp.match(/T(\d{2}):/)
+  if (!hourMatch) {
+    return new Date(timestamp).getHours()
+  }
+
+  const hour = parseInt(hourMatch[1], 10)
+
+  // Check if timestamp has timezone offset
+  const offsetMatch = timestamp.match(/([+-])(\d{2}):(\d{2})$/)
+  if (offsetMatch) {
+    // Timestamp has explicit offset (e.g., +11:00) - hour is already local
+    return hour
+  }
+
+  // Check if timestamp is UTC (ends with Z)
+  if (timestamp.endsWith('Z')) {
+    // Convert UTC hour to Sydney time
+    // Determine DST: Oct-Mar = AEDT (+11), Apr-Sep = AEST (+10)
+    const dateMatch = timestamp.match(/(\d{4})-(\d{2})-(\d{2})/)
+    if (dateMatch) {
+      const month = parseInt(dateMatch[2], 10)
+      const isDST = month >= 10 || month <= 3 // Oct-Mar
+      const offset = isDST ? 11 : 10
+      return (hour + offset) % 24
+    }
+    // Fallback: assume AEDT (+11)
+    return (hour + 11) % 24
+  }
+
+  // No timezone info - assume hour is already local
+  return hour
+}
