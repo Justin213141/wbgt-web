@@ -432,6 +432,46 @@ interface SolarRadiationValues {
 }
 
 /**
+ * Strip timezone offset from ISO timestamp for consistent comparison
+ * Handles formats like "2026-01-15T13:30:00+11:00" -> "2026-01-15T13:30:00"
+ */
+function stripTimezoneOffset(time: string): string {
+  // Remove timezone offset like +11:00, -05:00, Z
+  return time.replace(/[+-]\d{2}:\d{2}$/, '').replace(/Z$/, '')
+}
+
+/**
+ * Look up solar radiation values from the map, handling timezone offset differences
+ * BOM returns timestamps with timezone offset (+11:00), satellite API returns without
+ */
+function lookupSolarRadiation(
+  solarMap: Map<string, SolarRadiationValues>,
+  time: string
+): SolarRadiationValues {
+  // First try exact match
+  let solar = solarMap.get(time)
+  if (solar) return solar
+
+  // Strip timezone offset and try again
+  const timeNoTz = stripTimezoneOffset(time)
+  solar = solarMap.get(timeNoTz)
+  if (solar) return solar
+
+  // Try without seconds (HH:MM format)
+  const timeShort = timeNoTz.replace(/:00$/, '').replace(/:00:00$/, ':00')
+  solar = solarMap.get(timeShort)
+  if (solar) return solar
+
+  // Try with seconds added
+  if (!timeNoTz.match(/:\d{2}:\d{2}$/)) {
+    solar = solarMap.get(`${timeNoTz}:00`)
+    if (solar) return solar
+  }
+
+  return { shortwave: NaN, direct: NaN, diffuse: NaN }
+}
+
+/**
  * Interpolate solar radiation for :30 timestamps
  * Solar data is only available hourly, so :30 values are computed as
  * the average of the current hour and next hour values
@@ -445,8 +485,11 @@ function interpolateSolarRadiation(
     const isHalfHour = /:30/.test(obs.time)
     if (!isHalfHour) return obs
 
+    // Strip timezone offset for consistent processing
+    const timeNoTz = stripTimezoneOffset(obs.time)
+
     // Get the current hour timestamp (for looking up in solarMap)
-    const currentHourTime = obs.time.replace(/:30:00$/, ':00:00').replace(/:30$/, ':00')
+    const currentHourTime = timeNoTz.replace(/:30:00$/, ':00:00').replace(/:30$/, ':00')
 
     // Get the next hour timestamp by string manipulation (avoid timezone conversion)
     // Parse hour from timestamp like "2025-12-06T13:00:00" or "2025-12-06T13:00"
@@ -469,15 +512,13 @@ function interpolateSolarRadiation(
         nextHourTime = nextHourTime.replace(/\d{4}-\d{2}-\d{2}/, newDateStr)
       }
     }
-    const nextHourTimeShort = nextHourTime.replace(/:00$/, '').replace(/:00:00$/, ':00')
 
-    // Try to get solar values for current and next hour
-    const currentSolar = solarMap.get(currentHourTime) || solarMap.get(currentHourTime.slice(0, -3))
-    const nextSolar = solarMap.get(nextHourTime) || solarMap.get(nextHourTimeShort)
+    // Try to get solar values for current and next hour using the lookup helper
+    const currentSolar = lookupSolarRadiation(solarMap, currentHourTime)
+    const nextSolar = lookupSolarRadiation(solarMap, nextHourTime)
 
     // If we have both values, interpolate
-    if (currentSolar && nextSolar &&
-        !isNaN(currentSolar.shortwave) && !isNaN(nextSolar.shortwave)) {
+    if (!isNaN(currentSolar.shortwave) && !isNaN(nextSolar.shortwave)) {
       return {
         ...obs,
         solarRadiation: (currentSolar.shortwave + nextSolar.shortwave) / 2,
@@ -604,8 +645,8 @@ export async function fetchObservationsWithFallback(
 
   // Build solar radiation lookup map
   // Normalize timestamps to handle format differences:
-  // - BOM uses: "2025-12-03T10:00:00" (with seconds)
-  // - Satellite uses: "2025-12-03T10:00" (without seconds)
+  // - BOM uses: "2025-12-03T10:00:00+11:00" (with seconds and timezone)
+  // - Satellite uses: "2025-12-03T10:00" (without seconds or timezone)
   const solarMap = new Map<string, SolarRadiationValues>()
   if (solarData?.hourly?.time && solarSource) {
     solarData.hourly.time.forEach((time, i) => {
@@ -632,7 +673,10 @@ export async function fetchObservationsWithFallback(
 
   // If satellite data is missing recent hours, fetch forecast data as fallback
   const weatherTimes = weatherData?.hourly?.time || []
-  const missingTimes = weatherTimes.filter(time => !solarMap.has(time) && !solarMap.has(time.slice(0, -3)))
+  const missingTimes = weatherTimes.filter(time => {
+    const timeNoTz = stripTimezoneOffset(time)
+    return !solarMap.has(time) && !solarMap.has(timeNoTz) && !solarMap.has(timeNoTz.slice(0, -3))
+  })
 
   if (missingTimes.length > 0) {
     console.log(`Satellite data missing for ${missingTimes.length} hours, fetching forecast fallback...`)
@@ -658,7 +702,8 @@ export async function fetchObservationsWithFallback(
 
   // Merge data into observations
   const observations: ObservationData[] = weatherData.hourly.time.map((time, i) => {
-    const solar = solarMap.get(time) || { shortwave: NaN, direct: NaN, diffuse: NaN }
+    // Use the helper function to look up solar data with timezone handling
+    const solar = lookupSolarRadiation(solarMap, time)
     const h = weatherData!.hourly
 
     // Get pressure - from BOM if available, otherwise from OpenMeteo fallback
@@ -695,8 +740,8 @@ export async function fetchObservationsWithFallback(
     if (seenTimestamps.has(obs.time)) {
       // This is a duplicate - it should be :30 data
       // Change :00 to :30 in the timestamp
-      const fixedTime = obs.time.replace(/T(\d{2}):00:00$/, 'T$1:30:00')
-        .replace(/T(\d{2}):00$/, 'T$1:30')
+      const fixedTime = obs.time.replace(/T(\d{2}):00:00([+-]\d{2}:\d{2})?$/, 'T$1:30:00$2')
+        .replace(/T(\d{2}):00([+-]\d{2}:\d{2})?$/, 'T$1:30$2')
       return { ...obs, time: fixedTime }
     }
     seenTimestamps.add(obs.time)
@@ -784,7 +829,7 @@ export async function fetchHistoricalObservations(
   }
 
   const observations: ObservationData[] = weatherData.hourly.time.map((time, i) => {
-    const solar = solarMap.get(time) || { shortwave: NaN, direct: NaN, diffuse: NaN }
+    const solar = lookupSolarRadiation(solarMap, time)
     const h = weatherData.hourly
 
     return {
