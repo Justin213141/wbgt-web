@@ -79,7 +79,7 @@ export function HourlyForecastTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left p-2 font-medium text-xs">Time</th>
+                <th className="text-left p-2 font-medium text-xs sticky left-0 bg-muted/30 z-10 min-w-[80px]">Time</th>
                 <th className="text-left p-2 font-medium text-xs">WBGT</th>
                 <th className="text-left p-2 font-medium text-xs">Temp</th>
                 <th className="text-left p-2 font-medium text-xs">Humidity</th>
@@ -113,7 +113,7 @@ export function HourlyForecastTable({
 
                 return (
                   <tr key={index} className={`border-b border-border/50 hover:bg-muted/30 ${isDayBoundary ? 'border-t-2 border-t-gray-300' : ''}`}>
-                    <td className="p-2">
+                    <td className="p-2 sticky left-0 bg-background z-10 min-w-[80px]">
                       <div className="font-medium text-xs">
                         {showDate && <span className="text-muted-foreground mr-1">{currentDate}</span>}
                         {formatTime(hour.localTimestamp)}
