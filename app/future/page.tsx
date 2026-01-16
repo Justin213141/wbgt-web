@@ -89,11 +89,11 @@ export default function FuturePage() {
 
   // Calculate WBGT from multi-model data - extended to 48 hours
   // When multimodel is enabled: average input variables, then calculate WBGT
-  const { forecast, activeModels, wbgtRange } = useMemo(() => {
-    if (!modelResults) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null }
+  const { forecast, activeModels, wbgtRange, rainRange } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null, rainRange: null }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null }
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null, rainRange: null }
 
     const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
     const refModel = successfulModels[0]
@@ -103,8 +103,9 @@ export default function FuturePage() {
     const maxHours = 48
     const limitedTimes = times.slice(0, maxHours)
 
-    // Arrays to collect WBGT range data when multimodel
+    // Arrays to collect range data when multimodel
     const wbgtRangeData: { min: number; max: number }[] = []
+    const rainRangeData: { min: number; max: number }[] = []
 
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
       if (multiModelEnabled && successfulModels.length > 1) {
@@ -186,6 +187,12 @@ export default function FuturePage() {
           max: modelWbgts.length > 0 ? Math.max(...modelWbgts) : wbgt,
         })
 
+        const validPrecipProb = precipProbValues.filter(v => !isNaN(v))
+        rainRangeData.push({
+          min: validPrecipProb.length > 0 ? Math.min(...validPrecipProb) : avgPrecipProb,
+          max: validPrecipProb.length > 0 ? Math.max(...validPrecipProb) : avgPrecipProb,
+        })
+
         // Calculate dew point using Magnus formula approximation
         const a = 17.27
         const b = 237.7
@@ -249,6 +256,7 @@ export default function FuturePage() {
       forecast: forecastData,
       activeModels: modelIds,
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
+      rainRange: multiModelEnabled && rainRangeData.length > 0 ? rainRangeData : null,
     }
   }, [modelResults, multiModelEnabled, location.lat, location.lon])
 
@@ -290,6 +298,7 @@ export default function FuturePage() {
             title="48-Hour Detailed Forecast"
             intervalHours={3}
             wbgtRange={wbgtRange}
+            rainRange={rainRange}
             multiModelEnabled={multiModelEnabled}
           />
 
