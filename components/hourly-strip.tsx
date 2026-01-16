@@ -41,6 +41,7 @@ interface HourlyRanges {
   dew_point?: MetricRange[]
   humidity?: MetricRange[]
   wind_speed?: MetricRange[]
+  rain_chance?: MetricRange[]
 }
 
 interface HourlyStripProps {
@@ -123,7 +124,7 @@ export function HourlyStrip({ data, maxHours = 48, wbgtRange, ranges, multiModel
   }
 
   // Rows that get taller when multimodel is enabled to show ranges
-  const rangeRows = multiModelEnabled ? ['temp', 'wbgt', 'dp', 'humidity', 'wind'] : []
+  const rangeRows = multiModelEnabled ? ['temp', 'wbgt', 'dp', 'humidity', 'wind', 'rain'] : []
 
   // Reordered: WBGT, Temp, SR, DP, RH, Wind, Rain %, UV, AQI
   const rowLabels = [
@@ -280,8 +281,8 @@ export function HourlyStrip({ data, maxHours = 48, wbgtRange, ranges, multiModel
                     </div>
 
                     {/* Rain Chance */}
-                    <div className="h-7 flex items-center justify-center text-xs text-blue-600">
-                      {(hour.rain_chance ?? 0).toFixed(0)}
+                    <div className={`flex items-center justify-center text-xs text-blue-600 ${multiModelEnabled ? 'h-10' : 'h-7'}`}>
+                      {formatWithRange(hour.rain_chance ?? 0, ranges?.rain_chance, index, '%')}
                     </div>
 
                     {/* UV Index */}
