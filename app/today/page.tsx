@@ -452,7 +452,6 @@ export default function TodayPage() {
     // Build ranges object for HourlyStrip
     const ranges = multiModelEnabled ? {
       temperature: tempRangeData,
-      dew_point: dewPointRangeData,
       humidity: humidityRangeData,
       wind_speed: windSpeedRangeData,
       rain_chance: rainRangeData,

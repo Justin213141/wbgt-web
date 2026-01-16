@@ -38,7 +38,6 @@ interface MetricRange {
 interface HourlyRanges {
   wbgt?: MetricRange[]
   temperature?: MetricRange[]
-  dew_point?: MetricRange[]
   humidity?: MetricRange[]
   wind_speed?: MetricRange[]
   rain_chance?: MetricRange[]
@@ -124,7 +123,7 @@ export function HourlyStrip({ data, maxHours = 48, wbgtRange, ranges, multiModel
   }
 
   // Rows that get taller when multimodel is enabled to show ranges
-  const rangeRows = multiModelEnabled ? ['temp', 'wbgt', 'dp', 'humidity', 'wind', 'rain'] : []
+  const rangeRows = multiModelEnabled ? ['temp', 'wbgt', 'humidity', 'wind', 'rain'] : []
 
   // Reordered: WBGT, Temp, SR, DP, RH, Wind, Rain %, UV, AQI
   const rowLabels = [
@@ -266,8 +265,8 @@ export function HourlyStrip({ data, maxHours = 48, wbgtRange, ranges, multiModel
                     </div>
 
                     {/* Dew Point */}
-                    <div className={`flex items-center justify-center text-xs ${getDewPointTextColor(hour.dew_point ?? 0)} ${multiModelEnabled ? 'h-10' : 'h-7'}`}>
-                      {formatWithRange(hour.dew_point ?? 0, ranges?.dew_point, index, '°')}
+                    <div className={`h-7 flex items-center justify-center text-xs ${getDewPointTextColor(hour.dew_point ?? 0)}`}>
+                      {(hour.dew_point ?? 0).toFixed(0)}°
                     </div>
 
                     {/* Humidity */}
