@@ -162,7 +162,6 @@ export default function TodayPage() {
     const humidityRangeData: { min: number; max: number }[] = []
     const dewPointRangeData: { min: number; max: number }[] = []
     const windSpeedRangeData: { min: number; max: number }[] = []
-    const rainRangeData: { min: number; max: number }[] = []
 
     // Calculate forecast data
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
@@ -269,12 +268,6 @@ export default function TodayPage() {
         windSpeedRangeData.push({
           min: validWindSpeed.length > 0 ? Math.min(...validWindSpeed) * 3.6 : avgWindSpeed * 3.6,
           max: validWindSpeed.length > 0 ? Math.max(...validWindSpeed) * 3.6 : avgWindSpeed * 3.6,
-        })
-
-        const validPrecipProb = precipProbValues.filter(v => !isNaN(v))
-        rainRangeData.push({
-          min: validPrecipProb.length > 0 ? Math.min(...validPrecipProb) : avgPrecipProb,
-          max: validPrecipProb.length > 0 ? Math.max(...validPrecipProb) : avgPrecipProb,
         })
 
         // Calculate dew point using Magnus formula approximation
@@ -455,7 +448,6 @@ export default function TodayPage() {
       dew_point: dewPointRangeData,
       humidity: humidityRangeData,
       wind_speed: windSpeedRangeData,
-      rain_chance: rainRangeData,
     } : null
 
     return {
