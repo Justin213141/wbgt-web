@@ -29,6 +29,7 @@ export interface NormalizedWeatherData {
   dewPoint: number[]
   apparentTemp: number[]
   cloudCover: number[]
+  precipitationProbability: number[]  // Rain chance percentage
 }
 
 export interface ModelFetchResult {
@@ -55,6 +56,7 @@ export interface OpenMeteoResponse {
     diffuse_radiation_instant?: number[]
     uv_index: number[]
     cloud_cover: number[]
+    precipitation_probability?: number[]
   }
 }
 
@@ -72,6 +74,7 @@ export interface BomProxyResponse {
     dew_point_2m?: number[]
     apparent_temperature?: number[]
     cloud_cover?: number[]
+    precipitation_probability?: number[]
   }
 }
 
@@ -244,7 +247,8 @@ function buildOpenMeteoUrl(modelName: ModelName, lat: number, lon: number): stri
       'direct_radiation_instant',
       'diffuse_radiation_instant',
       'uv_index',
-      'cloud_cover'
+      'cloud_cover',
+      'precipitation_probability'
     ].join(','),
     timezone: 'GMT'
   })
@@ -445,7 +449,8 @@ export function normalizeModelData(modelName: ModelName, rawData: OpenMeteoRespo
     uvIndex: hourly.uv_index || new Array(length).fill(NaN),
     dewPoint: hourly.dew_point_2m || new Array(length).fill(NaN),
     apparentTemp: hourly.apparent_temperature || new Array(length).fill(NaN),
-    cloudCover: hourly.cloud_cover || new Array(length).fill(NaN)
+    cloudCover: hourly.cloud_cover || new Array(length).fill(NaN),
+    precipitationProbability: hourly.precipitation_probability || new Array(length).fill(0)
   }
 }
 

@@ -116,6 +116,7 @@ export default function FuturePage() {
         const uvIndexValues: number[] = []
         const cloudCoverValues: number[] = []
         const apparentTempValues: number[] = []
+        const precipProbValues: number[] = []
 
         successfulModels.forEach(model => {
           if (idx < model.times.length) {
@@ -126,6 +127,7 @@ export default function FuturePage() {
             uvIndexValues.push(model.uvIndex[idx])
             cloudCoverValues.push(model.cloudCover[idx])
             apparentTempValues.push(model.apparentTemp[idx])
+            precipProbValues.push(model.precipitationProbability[idx])
           }
         })
 
@@ -143,6 +145,7 @@ export default function FuturePage() {
         const avgUvIndex = safeAvg(uvIndexValues)
         const avgCloudCover = safeAvg(cloudCoverValues)
         const avgApparentTemp = safeAvg(apparentTempValues)
+        const avgPrecipProb = safeAvg(precipProbValues)
 
         // Calculate WBGT from averaged inputs
         const params: WBGTParams = {
@@ -202,7 +205,7 @@ export default function FuturePage() {
           cloud_cover: avgCloudCover,
           esi: 0,
           apparent_temp: avgApparentTemp,
-          rain_chance: 0,
+          rain_chance: isNaN(avgPrecipProb) ? 0 : avgPrecipProb,
         } as WeatherForecast
       } else {
         // SINGLE MODEL (BOM): Use values directly
@@ -237,7 +240,7 @@ export default function FuturePage() {
           cloud_cover: model.cloudCover[idx],
           esi: 0,
           apparent_temp: model.apparentTemp[idx],
-          rain_chance: 0,
+          rain_chance: model.precipitationProbability[idx] ?? 0,
         } as WeatherForecast
       }
     })

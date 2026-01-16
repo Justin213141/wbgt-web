@@ -178,6 +178,7 @@ export default function TodayPage() {
         const uvIndexValues: number[] = []
         const cloudCoverValues: number[] = []
         const apparentTempValues: number[] = []
+        const precipProbValues: number[] = []
 
         successfulModels.forEach((model, modelIdx) => {
           // Look up this model's index for the target timestamp
@@ -190,6 +191,7 @@ export default function TodayPage() {
             uvIndexValues.push(model.uvIndex[modelIndex])
             cloudCoverValues.push(model.cloudCover[modelIndex])
             apparentTempValues.push(model.apparentTemp[modelIndex])
+            precipProbValues.push(model.precipitationProbability[modelIndex])
           }
         })
 
@@ -207,6 +209,7 @@ export default function TodayPage() {
         const avgUvIndex = safeAvg(uvIndexValues)
         const avgCloudCover = safeAvg(cloudCoverValues)
         const avgApparentTemp = safeAvg(apparentTempValues)
+        const avgPrecipProb = safeAvg(precipProbValues)
 
         // Calculate WBGT from averaged inputs
         const params: WBGTParams = {
@@ -307,7 +310,7 @@ export default function TodayPage() {
           cloud_cover: avgCloudCover,
           esi: 0,
           apparent_temp: avgApparentTemp,
-          rain_chance: 0,
+          rain_chance: isNaN(avgPrecipProb) ? 0 : avgPrecipProb,
         } as WeatherForecast
       } else {
         // SINGLE MODEL (BOM): Use values directly
@@ -342,7 +345,7 @@ export default function TodayPage() {
           cloud_cover: model.cloudCover[idx],
           esi: 0,
           apparent_temp: model.apparentTemp[idx],
-          rain_chance: 0,
+          rain_chance: model.precipitationProbability[idx] ?? 0,
         } as WeatherForecast
       }
     })
