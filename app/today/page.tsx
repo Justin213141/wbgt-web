@@ -126,11 +126,11 @@ export default function TodayPage() {
   // Calculate WBGT from multi-model data
   // When multimodel is enabled: average input variables, then calculate WBGT
   // Extended to 12 hours for the hourly strip
-  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange, ranges } = useMemo(() => {
-    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, ranges: null }
+  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange, rainRange, ranges } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, rainRange: null, ranges: null }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, ranges: null }
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, rainRange: null, ranges: null }
 
     // Get model IDs for legend display
     const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
@@ -162,6 +162,7 @@ export default function TodayPage() {
     const humidityRangeData: { min: number; max: number }[] = []
     const dewPointRangeData: { min: number; max: number }[] = []
     const windSpeedRangeData: { min: number; max: number }[] = []
+    const rainRangeData: { min: number; max: number }[] = []
 
     // Calculate forecast data
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
@@ -268,6 +269,12 @@ export default function TodayPage() {
         windSpeedRangeData.push({
           min: validWindSpeed.length > 0 ? Math.min(...validWindSpeed) * 3.6 : avgWindSpeed * 3.6,
           max: validWindSpeed.length > 0 ? Math.max(...validWindSpeed) * 3.6 : avgWindSpeed * 3.6,
+        })
+
+        const validPrecipProb = precipProbValues.filter(v => !isNaN(v))
+        rainRangeData.push({
+          min: validPrecipProb.length > 0 ? Math.min(...validPrecipProb) : avgPrecipProb,
+          max: validPrecipProb.length > 0 ? Math.max(...validPrecipProb) : avgPrecipProb,
         })
 
         // Calculate dew point using Magnus formula approximation
@@ -448,6 +455,7 @@ export default function TodayPage() {
       dew_point: dewPointRangeData,
       humidity: humidityRangeData,
       wind_speed: windSpeedRangeData,
+      rain_chance: rainRangeData,
     } : null
 
     return {
@@ -456,6 +464,7 @@ export default function TodayPage() {
       activeModels: modelIds,
       forecastSummary: summary,
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
+      rainRange: multiModelEnabled && rainRangeData.length > 0 ? rainRangeData : null,
       ranges,
     }
   }, [modelResults, multiModelEnabled, airQualityData, location.lat, location.lon])
@@ -740,6 +749,7 @@ export default function TodayPage() {
             showUncertainty={false}
             wbgtRange={wbgtRange?.slice(0, 6)}
             tempRange={ranges?.temperature?.slice(0, 6)}
+            rainRange={rainRange?.slice(0, 6)}
             multiModelEnabled={multiModelEnabled}
           />
 

@@ -30,10 +30,11 @@ interface ForecastChartProps {
   showUncertainty?: boolean
   wbgtRange?: MetricRange[] | null
   tempRange?: MetricRange[] | null
+  rainRange?: MetricRange[] | null
   multiModelEnabled?: boolean
 }
 
-export function ForecastChart({ data, models = [], showUncertainty = false, wbgtRange, tempRange, multiModelEnabled }: ForecastChartProps) {
+export function ForecastChart({ data, models = [], showUncertainty = false, wbgtRange, tempRange, rainRange, multiModelEnabled }: ForecastChartProps) {
   const [visibleLines, setVisibleLines] = useState({
     wbgt: true,
     temperature: true,
@@ -58,6 +59,8 @@ export function ForecastChart({ data, models = [], showUncertainty = false, wbgt
     const wbgtMax = multiModelEnabled && wbgtRange?.[index] ? wbgtRange[index].max : item.wbgt
     const tempMin = multiModelEnabled && tempRange?.[index] ? tempRange[index].min : item.temperature
     const tempMax = multiModelEnabled && tempRange?.[index] ? tempRange[index].max : item.temperature
+    const rainMin = multiModelEnabled && rainRange?.[index] ? rainRange[index].min : item.rain_chance
+    const rainMax = multiModelEnabled && rainRange?.[index] ? rainRange[index].max : item.rain_chance
 
     return {
       time,
@@ -69,6 +72,7 @@ export function ForecastChart({ data, models = [], showUncertainty = false, wbgt
       solar_radiation: item.solar_radiation,
       wind_speed_ms: item.wind_speed_ms,
       rain_chance: item.rain_chance,
+      rainRange: multiModelEnabled ? [rainMin, rainMax] : undefined,
       uv_index: item.uv_index ?? 0,
       air_quality: item.air_quality ?? 0,
     }
@@ -202,7 +206,7 @@ export function ForecastChart({ data, models = [], showUncertainty = false, wbgt
               }}
               formatter={(value: number | number[], name: string) => {
                 // Skip range entries (they're for the uncertainty bands)
-                if (name === 'wbgtRange' || name === 'tempRange') {
+                if (name === 'wbgtRange' || name === 'tempRange' || name === 'rainRange') {
                   return null
                 }
                 // Handle array values (ranges) - show as "min - max"
@@ -331,18 +335,28 @@ export function ForecastChart({ data, models = [], showUncertainty = false, wbgt
                 dot={{ fill: "#3b82f6", r: 3 }}
               />
             )}
+            {multiModelEnabled && visibleLines.rain_chance && rainRange && (
+              <Area
+                yAxisId="percent"
+                type="monotone"
+                dataKey="rainRange"
+                stroke="none"
+                fill="#8b5cf6"
+                fillOpacity={0.15}
+                name="rainRange"
+                isAnimationActive={false}
+              />
+            )}
             {visibleLines.rain_chance && (
-              <>
-                <Area
-                  yAxisId="percent"
-                  type="monotone"
-                  dataKey="rain_chance"
-                  stroke="#8b5cf6"
-                  strokeWidth={0}
-                  fill="#8b5cf6"
-                  fillOpacity={0.2}
-                />
-              </>
+              <Line
+                yAxisId="percent"
+                type="monotone"
+                dataKey="rain_chance"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                name="rain_chance"
+                dot={{ fill: "#8b5cf6", r: 3 }}
+              />
             )}
             {/* Solar radiation line - Hidden Y-Axis */}
             {visibleLines.solar_radiation && (

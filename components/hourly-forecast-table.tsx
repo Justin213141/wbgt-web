@@ -18,6 +18,7 @@ interface HourlyForecastTableProps {
   title?: string
   intervalHours?: number
   wbgtRange?: { min: number; max: number }[] | null
+  rainRange?: { min: number; max: number }[] | null
   multiModelEnabled?: boolean
 }
 
@@ -26,6 +27,7 @@ export function HourlyForecastTable({
   title = "Detailed Forecast",
   intervalHours = 1,
   wbgtRange,
+  rainRange,
   multiModelEnabled
 }: HourlyForecastTableProps) {
   // Filter data to show only every N hours if interval > 1
@@ -37,6 +39,11 @@ export function HourlyForecastTable({
   const filteredRange = wbgtRange && intervalHours > 1
     ? wbgtRange.filter((_, index) => index % intervalHours === 0)
     : wbgtRange
+
+  // Filter rainRange to match the filtered data
+  const filteredRainRange = rainRange && intervalHours > 1
+    ? rainRange.filter((_, index) => index % intervalHours === 0)
+    : rainRange
 
   const formatTime = (timestamp: string) => {
     const date = parseApiDate(timestamp)
@@ -63,6 +70,23 @@ export function HourlyForecastTable({
       )
     }
     return <span>{mainValue}°</span>
+  }
+
+  // Format rain chance with range if multimodel is enabled
+  const formatRainValue = (rain: number, index: number) => {
+    const mainValue = (rain ?? 0).toFixed(0)
+    if (multiModelEnabled && filteredRainRange && filteredRainRange[index]) {
+      const range = filteredRainRange[index]
+      const rangeMin = range.min.toFixed(0)
+      const rangeMax = range.max.toFixed(0)
+      return (
+        <span>
+          {mainValue}%
+          <span className="text-[10px] ml-0.5 opacity-60">({rangeMin}-{rangeMax})</span>
+        </span>
+      )
+    }
+    return <span>{mainValue}%</span>
   }
 
   // Track date changes to show date headers
@@ -131,7 +155,7 @@ export function HourlyForecastTable({
                     <td className={`p-2 text-xs ${getWindSpeedTextColor((hour.wind_speed_ms ?? 0) * 3.6)}`}>{((hour.wind_speed_ms ?? 0) * 3.6).toFixed(0)}</td>
                     <td className={`p-2 text-xs ${getSolarRadiationTextColor(hour.solar_radiation ?? 0)}`}>{hour.solar_radiation?.toFixed(0) ?? '-'}</td>
                     <td className={`p-2 text-xs ${getUvIndexTextColor(hour.uv_index ?? 0)}`}>{hour.uv_index?.toFixed(0) ?? '-'}</td>
-                    <td className="p-2 text-xs text-blue-600">{(hour.rain_chance ?? 0).toFixed(0)}%</td>
+                    <td className="p-2 text-xs text-blue-600">{formatRainValue(hour.rain_chance ?? 0, index)}</td>
                   </tr>
                 )
               })}
