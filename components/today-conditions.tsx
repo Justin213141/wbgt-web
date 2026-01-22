@@ -15,6 +15,9 @@ import {
 import { parseApiDate } from "@/lib/utils"
 import { Cloud, Sun, CloudRain, CloudSun, CloudLightning, CloudSnow, Wind, Thermometer } from "lucide-react"
 
+// Round to nearest 5 for cleaner display
+const roundToNearest5 = (n: number) => Math.round(n / 5) * 5
+
 interface DaySummary {
   minTemp: number
   maxTemp: number
@@ -23,7 +26,7 @@ interface DaySummary {
   maxWbgt: number
   maxWbgtTimeWindow?: string  // e.g., "1PM-3PM"
   rainChance: number
-  peakRainTime?: string
+  rainTimeWindow?: string  // e.g., "2PM-4PM" (hours within 10% of peak)
   peakAqi?: number
   peakAqiTime?: string
   description?: string
@@ -273,29 +276,29 @@ export function TodayConditions({ data, forecastSummary, tomorrowSummary, wbgtRa
 
           {/* Secondary Metrics */}
           <div className="space-y-3 pt-4 border-t border-gray-100">
-            {forecastSummary && forecastSummary.rainChance > 0 && (
+            {forecastSummary && forecastSummary.rainChance > 25 && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CloudRain className="h-4 w-4 text-blue-500" />
                   <span className="text-sm text-gray-600">Rain</span>
                 </div>
                 <span className="text-sm font-medium text-blue-600">
-                  {forecastSummary.rainChance}%{forecastSummary.peakRainTime && ` at ${forecastSummary.peakRainTime}`}
+                  {roundToNearest5(forecastSummary.rainChance)}%{forecastSummary.rainTimeWindow && ` (${forecastSummary.rainTimeWindow})`}
                 </span>
               </div>
             )}
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Cloud className="h-4 w-4 text-gray-400" />
-                <span className="text-sm text-gray-600">Peak AQI</span>
+            {worstDailyAqi !== undefined && worstDailyAqi > 66 && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Cloud className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-600">Peak AQI</span>
+                </div>
+                <span className={`text-sm font-medium ${getAqiTextColor(worstDailyAqi)}`}>
+                  {Math.round(worstDailyAqi)} ({getAqCategory(worstDailyAqi)}){worstDailyAqiTime && ` (${worstDailyAqiTime})`}
+                </span>
               </div>
-              <span className={`text-sm font-medium ${getAqiTextColor(worstDailyAqi)}`}>
-                {worstDailyAqi !== undefined
-                  ? `${Math.round(worstDailyAqi)} (${getAqCategory(worstDailyAqi)})${worstDailyAqiTime ? ` at ${worstDailyAqiTime}` : ''}`
-                  : "N/A"}
-              </span>
-            </div>
+            )}
           </div>
 
           {/* Tomorrow Section */}
@@ -340,18 +343,18 @@ export function TodayConditions({ data, forecastSummary, tomorrowSummary, wbgtRa
                 </div>
               </div>
               <div className="space-y-2">
-                {tomorrowSummary.rainChance > 0 && (
+                {tomorrowSummary.rainChance > 25 && (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CloudRain className="h-4 w-4 text-blue-500" />
                       <span className="text-sm text-gray-600">Rain</span>
                     </div>
                     <span className="text-sm font-medium text-blue-600">
-                      {tomorrowSummary.rainChance}%{tomorrowSummary.peakRainTime && ` at ${tomorrowSummary.peakRainTime}`}
+                      {roundToNearest5(tomorrowSummary.rainChance)}%{tomorrowSummary.rainTimeWindow && ` (${tomorrowSummary.rainTimeWindow})`}
                     </span>
                   </div>
                 )}
-                {tomorrowSummary.peakAqi !== undefined && (
+                {tomorrowSummary.peakAqi !== undefined && tomorrowSummary.peakAqi > 66 && (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Cloud className="h-4 w-4 text-gray-400" />
@@ -359,7 +362,7 @@ export function TodayConditions({ data, forecastSummary, tomorrowSummary, wbgtRa
                     </div>
                     <span className={`text-sm font-medium ${getAqiTextColor(tomorrowSummary.peakAqi)}`}>
                       {Math.round(tomorrowSummary.peakAqi)} ({getAqCategory(tomorrowSummary.peakAqi)})
-                      {tomorrowSummary.peakAqiTime ? ` at ${tomorrowSummary.peakAqiTime}` : ''}
+                      {tomorrowSummary.peakAqiTime && ` (${tomorrowSummary.peakAqiTime})`}
                     </span>
                   </div>
                 )}

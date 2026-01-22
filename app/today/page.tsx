@@ -403,14 +403,19 @@ export default function TodayPage() {
       maxWbgtTimeWindow = `${formatHr(startHour)}-${formatHr(endHour)}`
     }
 
-    // Calculate peak rain time (if any rain > 10%)
-    let peakRainTime: string | undefined
-    if (maxRain > 10) {
-      const peakRainForecast = (todayForecasts.length > 0 ? todayForecasts : forecastWithAQI.slice(0, 12))
-        .find(f => f.rain_chance === maxRain)
-      if (peakRainForecast) {
-        const peakTime = parseApiDate(peakRainForecast.timestamp || peakRainForecast.localTimestamp || '')
-        peakRainTime = peakTime.toLocaleTimeString("en-AU", { hour: "numeric", hour12: true }).toUpperCase()
+    // Calculate rain time window (hours within 10% of peak rain)
+    let rainTimeWindow: string | undefined
+    if (maxRain > 25) {
+      const rainThreshold = maxRain - 10  // Within 10% of peak
+      const rainWithTimes = (todayForecasts.length > 0 ? todayForecasts : forecastWithAQI.slice(0, 12))
+        .filter(f => f.rain_chance >= rainThreshold)
+        .map(f => parseApiDate(f.timestamp || f.localTimestamp || ''))
+      if (rainWithTimes.length > 0) {
+        const sortedTimes = rainWithTimes.sort((a, b) => a.getTime() - b.getTime())
+        const startHour = sortedTimes[0].getHours()
+        const endHour = sortedTimes[sortedTimes.length - 1].getHours() + 1
+        const formatHr = (h: number) => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`
+        rainTimeWindow = `${formatHr(startHour)}-${formatHr(endHour)}`
       }
     }
 
@@ -446,7 +451,7 @@ export default function TodayPage() {
       maxWbgt,
       maxWbgtTimeWindow,
       rainChance: maxRain,
-      peakRainTime,
+      rainTimeWindow,
     }
 
     // Build ranges object for HourlyStrip
@@ -518,11 +523,26 @@ export default function TodayPage() {
           (obs.air_quality ?? 0) > (worst.air_quality ?? 0) ? obs : worst
         )
         worstDailyAqi = worstObs.air_quality
-        const worstTime = parseApiDate(worstObs.timestamp || worstObs.localTimestamp || '')
-        worstDailyAqiTime = worstTime.toLocaleTimeString("en-AU", {
-          hour: "numeric",
-          hour12: true
-        }).toUpperCase()
+
+        // Calculate time window for all hours in the same AQI category
+        const getAqiCategoryThreshold = (aqi: number) => {
+          if (aqi <= 33) return 0    // Very Good
+          if (aqi <= 66) return 34   // Good
+          if (aqi <= 99) return 67   // Fair
+          if (aqi <= 149) return 100 // Poor
+          return 150                  // Very Poor
+        }
+        const aqiThreshold = getAqiCategoryThreshold(worstDailyAqi ?? 0)
+        const aqiWithTimes = todayAqiObs
+          .filter(obs => (obs.air_quality ?? 0) >= aqiThreshold)
+          .map(obs => parseApiDate(obs.timestamp || obs.localTimestamp || ''))
+        if (aqiWithTimes.length > 0) {
+          const sortedTimes = aqiWithTimes.sort((a, b) => a.getTime() - b.getTime())
+          const startHour = sortedTimes[0].getHours()
+          const endHour = sortedTimes[sortedTimes.length - 1].getHours() + 1
+          const formatHr = (h: number) => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`
+          worstDailyAqiTime = `${formatHr(startHour)}-${formatHr(endHour)}`
+        }
       }
     }
   }
@@ -567,17 +587,32 @@ export default function TodayPage() {
       maxWbgtTimeWindow = `${formatHr(startHour)}-${formatHr(endHour)}`
     }
 
-    // Calculate peak rain time (if any rain > 10%)
-    let peakRainTime: string | undefined
-    if (maxRain > 10) {
-      const peakRainForecast = tomorrowForecasts.find(f => f.rain_chance === maxRain)
-      if (peakRainForecast) {
-        const peakTime = parseApiDate(peakRainForecast.timestamp || peakRainForecast.localTimestamp || '')
-        peakRainTime = peakTime.toLocaleTimeString("en-AU", { hour: "numeric", hour12: true }).toUpperCase()
+    // Calculate rain time window (hours within 10% of peak rain)
+    let rainTimeWindow: string | undefined
+    if (maxRain > 25) {
+      const rainThreshold = maxRain - 10  // Within 10% of peak
+      const rainWithTimes = tomorrowForecasts
+        .filter(f => f.rain_chance >= rainThreshold)
+        .map(f => parseApiDate(f.timestamp || f.localTimestamp || ''))
+      if (rainWithTimes.length > 0) {
+        const sortedTimes = rainWithTimes.sort((a, b) => a.getTime() - b.getTime())
+        const startHour = sortedTimes[0].getHours()
+        const endHour = sortedTimes[sortedTimes.length - 1].getHours() + 1
+        const formatHr = (h: number) => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`
+        rainTimeWindow = `${formatHr(startHour)}-${formatHr(endHour)}`
       }
     }
 
-    // Find peak AQI for tomorrow with timestamp (limited to 7am-10pm)
+    // Find peak AQI for tomorrow with time window (limited to 7am-10pm)
+    // Helper to get AQI category threshold
+    const getAqiCategoryThreshold = (aqi: number) => {
+      if (aqi <= 33) return 0    // Very Good
+      if (aqi <= 66) return 34   // Good
+      if (aqi <= 99) return 67   // Fair
+      if (aqi <= 149) return 100 // Poor
+      return 150                  // Very Poor
+    }
+
     let peakAqi: number | undefined
     let peakAqiTime: string | undefined
 
@@ -591,11 +626,19 @@ export default function TodayPage() {
         (f.air_quality ?? 0) > (peak.air_quality ?? 0) ? f : peak
       )
       peakAqi = peakForecast.air_quality
-      const peakTime = parseApiDate(peakForecast.timestamp || peakForecast.localTimestamp || '')
-      peakAqiTime = peakTime.toLocaleTimeString("en-AU", {
-        hour: "numeric",
-        hour12: true
-      }).toUpperCase()
+
+      // Calculate time window for all hours in the same AQI category
+      const aqiThreshold = getAqiCategoryThreshold(peakAqi ?? 0)
+      const aqiWithTimes = aqiForecasts
+        .filter(f => (f.air_quality ?? 0) >= aqiThreshold)
+        .map(f => parseApiDate(f.timestamp || f.localTimestamp || ''))
+      if (aqiWithTimes.length > 0) {
+        const sortedTimes = aqiWithTimes.sort((a, b) => a.getTime() - b.getTime())
+        const startHour = sortedTimes[0].getHours()
+        const endHour = sortedTimes[sortedTimes.length - 1].getHours() + 1
+        const formatHr = (h: number) => `${h % 12 || 12}${h < 12 ? 'AM' : 'PM'}`
+        peakAqiTime = `${formatHr(startHour)}-${formatHr(endHour)}`
+      }
     }
 
     // Determine most extreme weather icon
@@ -638,7 +681,7 @@ export default function TodayPage() {
       maxWbgt,
       maxWbgtTimeWindow,
       rainChance: maxRain,
-      peakRainTime,
+      rainTimeWindow,
       peakAqi,
       peakAqiTime,
       iconDescriptor,
