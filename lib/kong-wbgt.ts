@@ -446,8 +446,8 @@ function calculateConvectiveCoefficient(
   windSpeed: number,
   globeDiameter: number = CONSTANTS.GLOBE_DIAMETER
 ): number {
-  // Ensure minimum wind speed to avoid division by zero
-  const v = Math.max(windSpeed, 0.1);
+  // Ensure minimum wind speed for realistic outdoor conditions
+  const v = Math.max(windSpeed, 2);
 
   // Kinematic viscosity of air at 20°C (m²/s)
   const nu = 1.5e-5;
