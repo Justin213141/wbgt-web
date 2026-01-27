@@ -9,7 +9,8 @@ import {
   getSolarRadiationTextColor,
   getDewPointTextColor,
   getUvIndexTextColor,
-  getWindSpeedTextColor
+  getWindSpeedTextColor,
+  getCloudCoverTextColor
 } from "@/lib/weather-utils"
 import { parseApiDate } from "@/lib/utils"
 
@@ -19,6 +20,7 @@ interface HourlyForecastTableProps {
   intervalHours?: number
   wbgtRange?: { min: number; max: number }[] | null
   rainRange?: { min: number; max: number }[] | null
+  cloudRange?: { min: number; max: number }[] | null
   multiModelEnabled?: boolean
 }
 
@@ -28,6 +30,7 @@ export function HourlyForecastTable({
   intervalHours = 1,
   wbgtRange,
   rainRange,
+  cloudRange,
   multiModelEnabled
 }: HourlyForecastTableProps) {
   // Filter data to show only every N hours if interval > 1
@@ -44,6 +47,11 @@ export function HourlyForecastTable({
   const filteredRainRange = rainRange && intervalHours > 1
     ? rainRange.filter((_, index) => index % intervalHours === 0)
     : rainRange
+
+  // Filter cloudRange to match the filtered data
+  const filteredCloudRange = cloudRange && intervalHours > 1
+    ? cloudRange.filter((_, index) => index % intervalHours === 0)
+    : cloudRange
 
   const formatTime = (timestamp: string) => {
     const date = parseApiDate(timestamp)
@@ -89,6 +97,23 @@ export function HourlyForecastTable({
     return <span>{mainValue}%</span>
   }
 
+  // Format cloud cover with range if multimodel is enabled
+  const formatCloudValue = (cloud: number, index: number) => {
+    const mainValue = (cloud ?? 0).toFixed(0)
+    if (multiModelEnabled && filteredCloudRange && filteredCloudRange[index]) {
+      const range = filteredCloudRange[index]
+      const rangeMin = range.min.toFixed(0)
+      const rangeMax = range.max.toFixed(0)
+      return (
+        <span>
+          {mainValue}%
+          <span className="text-[10px] ml-0.5 opacity-60">({rangeMin}-{rangeMax})</span>
+        </span>
+      )
+    }
+    return <span>{mainValue}%</span>
+  }
+
   // Track date changes to show date headers
   let lastDate = ""
   let lastHour = -1
@@ -110,6 +135,7 @@ export function HourlyForecastTable({
                 <th className="text-left p-2 font-medium text-xs">Dew Pt</th>
                 <th className="text-left p-2 font-medium text-xs">Wind</th>
                 <th className="text-left p-2 font-medium text-xs">Solar</th>
+                <th className="text-left p-2 font-medium text-xs">Cloud</th>
                 <th className="text-left p-2 font-medium text-xs">UV</th>
                 <th className="text-left p-2 font-medium text-xs">Rain</th>
               </tr>
@@ -154,6 +180,7 @@ export function HourlyForecastTable({
                     <td className={`p-2 text-xs ${getDewPointTextColor(hour.dew_point ?? 0)}`}>{hour.dew_point?.toFixed(0) ?? '-'}°</td>
                     <td className={`p-2 text-xs ${getWindSpeedTextColor((hour.wind_speed_ms ?? 0) * 3.6)}`}>{((hour.wind_speed_ms ?? 0) * 3.6).toFixed(0)}</td>
                     <td className={`p-2 text-xs ${getSolarRadiationTextColor(hour.solar_radiation ?? 0)}`}>{hour.solar_radiation?.toFixed(0) ?? '-'}</td>
+                    <td className={`p-2 text-xs ${getCloudCoverTextColor(hour.cloud_cover ?? 0)}`}>{formatCloudValue(hour.cloud_cover ?? 0, index)}</td>
                     <td className={`p-2 text-xs ${getUvIndexTextColor(hour.uv_index ?? 0)}`}>{hour.uv_index?.toFixed(0) ?? '-'}</td>
                     <td className="p-2 text-xs text-blue-600">{formatRainValue(hour.rain_chance ?? 0, index)}</td>
                   </tr>

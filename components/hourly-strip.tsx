@@ -7,6 +7,7 @@ import {
   getWBGTZoneColor,
   getWbgtTextColor,
   getSolarRadiationTextColor,
+  getCloudCoverTextColor,
   getDewPointTextColor,
   getUvIndexTextColor,
   getAqiTextColor,
@@ -41,6 +42,7 @@ interface HourlyRanges {
   humidity?: MetricRange[]
   wind_speed?: MetricRange[]
   rain_chance?: MetricRange[]
+  cloud_cover?: MetricRange[]
 }
 
 interface HourlyStripProps {
@@ -123,14 +125,15 @@ export function HourlyStrip({ data, maxHours = 48, wbgtRange, ranges, multiModel
   }
 
   // Rows that get taller when multimodel is enabled to show ranges
-  const rangeRows = multiModelEnabled ? ['temp', 'wbgt', 'humidity', 'wind', 'rain'] : []
+  const rangeRows = multiModelEnabled ? ['temp', 'wbgt', 'humidity', 'wind', 'rain', 'cloud'] : []
 
-  // Reordered: WBGT, Temp, SR, DP, RH, Wind, Rain %, UV, AQI
+  // Reordered: WBGT, Temp, SR, Cloud, DP, RH, Wind, Rain %, UV, AQI
   const rowLabels = [
     { key: "icon", label: "" },
     { key: "wbgt", label: "WBGT" },
     { key: "temp", label: "°C" },
     { key: "sr", label: "SR" },
+    { key: "cloud", label: "Cloud" },
     { key: "dp", label: "DP" },
     { key: "humidity", label: "RH%" },
     { key: "wind", label: "km/h" },
@@ -262,6 +265,11 @@ export function HourlyStrip({ data, maxHours = 48, wbgtRange, ranges, multiModel
                     {/* Solar Radiation */}
                     <div className={`h-7 flex items-center justify-center text-xs ${getSolarRadiationTextColor(hour.solar_radiation ?? 0)}`}>
                       {(hour.solar_radiation ?? 0).toFixed(0)}
+                    </div>
+
+                    {/* Cloud Cover */}
+                    <div className={`flex items-center justify-center text-xs ${getCloudCoverTextColor(hour.cloud_cover ?? 0)} ${multiModelEnabled ? 'h-10' : 'h-7'}`}>
+                      {formatWithRange(hour.cloud_cover ?? 0, ranges?.cloud_cover, index, '%')}
                     </div>
 
                     {/* Dew Point */}

@@ -89,11 +89,11 @@ export default function FuturePage() {
 
   // Calculate WBGT from multi-model data - extended to 48 hours
   // When multimodel is enabled: average input variables, then calculate WBGT
-  const { forecast, activeModels, wbgtRange, rainRange } = useMemo(() => {
-    if (!modelResults) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null, rainRange: null }
+  const { forecast, activeModels, wbgtRange, rainRange, cloudRange } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null, rainRange: null, cloudRange: null }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null, rainRange: null }
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], activeModels: [] as WeatherModelId[], wbgtRange: null, rainRange: null, cloudRange: null }
 
     const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
     const refModel = successfulModels[0]
@@ -106,6 +106,7 @@ export default function FuturePage() {
     // Arrays to collect range data when multimodel
     const wbgtRangeData: { min: number; max: number }[] = []
     const rainRangeData: { min: number; max: number }[] = []
+    const cloudRangeData: { min: number; max: number }[] = []
 
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
       if (multiModelEnabled && successfulModels.length > 1) {
@@ -124,11 +125,15 @@ export default function FuturePage() {
             tempValues.push(model.temperature[idx])
             humidityValues.push(model.humidity[idx])
             windSpeedValues.push(model.windSpeed[idx])
-            solarRadValues.push(model.solarRadiation[idx])
             uvIndexValues.push(model.uvIndex[idx])
-            cloudCoverValues.push(model.cloudCover[idx])
             apparentTempValues.push(model.apparentTemp[idx])
             precipProbValues.push(model.precipitationProbability[idx])
+            // Skip BOM for solar/cloud - BOM uses Open-Meteo default blend, not model-specific data
+            // Only include ECMWF and GFS which have their own model-specific values
+            if (model.modelName !== 'bom_access') {
+              solarRadValues.push(model.solarRadiation[idx])
+              cloudCoverValues.push(model.cloudCover[idx])
+            }
           }
         })
 
@@ -191,6 +196,12 @@ export default function FuturePage() {
         rainRangeData.push({
           min: validPrecipProb.length > 0 ? Math.min(...validPrecipProb) : avgPrecipProb,
           max: validPrecipProb.length > 0 ? Math.max(...validPrecipProb) : avgPrecipProb,
+        })
+
+        const validCloudCover = cloudCoverValues.filter(v => !isNaN(v))
+        cloudRangeData.push({
+          min: validCloudCover.length > 0 ? Math.min(...validCloudCover) : avgCloudCover,
+          max: validCloudCover.length > 0 ? Math.max(...validCloudCover) : avgCloudCover,
         })
 
         // Calculate dew point using Magnus formula approximation
@@ -257,6 +268,7 @@ export default function FuturePage() {
       activeModels: modelIds,
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
       rainRange: multiModelEnabled && rainRangeData.length > 0 ? rainRangeData : null,
+      cloudRange: multiModelEnabled && cloudRangeData.length > 0 ? cloudRangeData : null,
     }
   }, [modelResults, multiModelEnabled, location.lat, location.lon])
 
@@ -299,6 +311,7 @@ export default function FuturePage() {
             intervalHours={3}
             wbgtRange={wbgtRange}
             rainRange={rainRange}
+            cloudRange={cloudRange}
             multiModelEnabled={multiModelEnabled}
           />
 

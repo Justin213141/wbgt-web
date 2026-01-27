@@ -141,6 +141,18 @@ export function getTemperatureTextColor(temp: number): string {
   return "text-red-600"
 }
 
+/**
+ * Get text color class for Cloud Cover (percentage)
+ * 0-20: blue (clear), 20-40: cyan (mostly clear), 40-60: gray (partly cloudy), 60-80: gray-dark (mostly cloudy), >80: slate (overcast)
+ */
+export function getCloudCoverTextColor(cloud: number): string {
+  if (cloud < 20) return "text-blue-500"
+  if (cloud < 40) return "text-cyan-600"
+  if (cloud < 60) return "text-gray-500"
+  if (cloud < 80) return "text-gray-600"
+  return "text-slate-700"
+}
+
 export function getSafetyRecommendations(wbgtCelsius: number, esi: number) {
   const zone = getWBGTZone(wbgtCelsius)
 

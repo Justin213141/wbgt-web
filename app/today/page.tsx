@@ -126,11 +126,11 @@ export default function TodayPage() {
   // Calculate WBGT from multi-model data
   // When multimodel is enabled: average input variables, then calculate WBGT
   // Extended to 12 hours for the hourly strip
-  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange, rainRange, ranges } = useMemo(() => {
-    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, rainRange: null, ranges: null }
+  const { forecast, ensembleData, activeModels, forecastSummary, wbgtRange, rainRange, cloudRange, ranges } = useMemo(() => {
+    if (!modelResults) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, rainRange: null, cloudRange: null, ranges: null }
 
     const successfulModels = getSuccessfulModels(modelResults)
-    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, rainRange: null, ranges: null }
+    if (successfulModels.length === 0) return { forecast: [] as WeatherForecast[], ensembleData: null, activeModels: [] as WeatherModelId[], forecastSummary: null, wbgtRange: null, rainRange: null, cloudRange: null, ranges: null }
 
     // Get model IDs for legend display
     const modelIds = successfulModels.map(m => m.modelName) as WeatherModelId[]
@@ -163,6 +163,7 @@ export default function TodayPage() {
     const dewPointRangeData: { min: number; max: number }[] = []
     const windSpeedRangeData: { min: number; max: number }[] = []
     const rainRangeData: { min: number; max: number }[] = []
+    const cloudRangeData: { min: number; max: number }[] = []
 
     // Calculate forecast data
     const forecastData: WeatherForecast[] = limitedTimes.map((time, idx) => {
@@ -188,11 +189,15 @@ export default function TodayPage() {
             tempValues.push(model.temperature[modelIndex])
             humidityValues.push(model.humidity[modelIndex])
             windSpeedValues.push(model.windSpeed[modelIndex])
-            solarRadValues.push(model.solarRadiation[modelIndex])
             uvIndexValues.push(model.uvIndex[modelIndex])
-            cloudCoverValues.push(model.cloudCover[modelIndex])
             apparentTempValues.push(model.apparentTemp[modelIndex])
             precipProbValues.push(model.precipitationProbability[modelIndex])
+            // Skip BOM for solar/cloud - BOM uses Open-Meteo default blend, not model-specific data
+            // Only include ECMWF and GFS which have their own model-specific values
+            if (model.modelName !== 'bom_access') {
+              solarRadValues.push(model.solarRadiation[modelIndex])
+              cloudCoverValues.push(model.cloudCover[modelIndex])
+            }
           }
         })
 
@@ -275,6 +280,12 @@ export default function TodayPage() {
         rainRangeData.push({
           min: validPrecipProb.length > 0 ? Math.min(...validPrecipProb) : avgPrecipProb,
           max: validPrecipProb.length > 0 ? Math.max(...validPrecipProb) : avgPrecipProb,
+        })
+
+        const validCloudCover = cloudCoverValues.filter(v => !isNaN(v))
+        cloudRangeData.push({
+          min: validCloudCover.length > 0 ? Math.min(...validCloudCover) : avgCloudCover,
+          max: validCloudCover.length > 0 ? Math.max(...validCloudCover) : avgCloudCover,
         })
 
         // Calculate dew point using Magnus formula approximation
@@ -460,6 +471,7 @@ export default function TodayPage() {
       humidity: humidityRangeData,
       wind_speed: windSpeedRangeData,
       rain_chance: rainRangeData,
+      cloud_cover: cloudRangeData,
     } : null
 
     return {
@@ -469,6 +481,7 @@ export default function TodayPage() {
       forecastSummary: summary,
       wbgtRange: multiModelEnabled && wbgtRangeData.length > 0 ? wbgtRangeData : null,
       rainRange: multiModelEnabled && rainRangeData.length > 0 ? rainRangeData : null,
+      cloudRange: multiModelEnabled && cloudRangeData.length > 0 ? cloudRangeData : null,
       ranges,
     }
   }, [modelResults, multiModelEnabled, airQualityData, location.lat, location.lon])
