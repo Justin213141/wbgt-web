@@ -50,9 +50,8 @@ wbgt-front-end/
 ### lib/kong-wbgt.ts
 **Purpose**: WBGT calculation engine using Kong et al. method
 **Exports**:
-- `calculateKongWBGT(params: WBGTParams): WBGTResult` - Main calculation
+- `calculateKongWBGT(params: WBGTParams): WBGTResult` - Main calculation (returns WBGT, globe temp, wet bulb temp)
 - `calculateWetBulbTemperature(Ta, RH)` - Stull approximation
-- `calculateGlobeTemperature(Ta, SR, wind, lat, timestamp)` - Globe temp
 - `calculateEnsembleStats(wbgtArrays)` - Model statistics
 - `categorizeHeatStress(wbgt)` - Risk categorization
 

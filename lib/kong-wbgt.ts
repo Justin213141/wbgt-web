@@ -395,9 +395,8 @@ function calculateKongNaturalWetBulb(
   const eSatTa = calculateSaturationVaporPressure(Ta);
   const ea = (RH / 100) * eSatTa;
 
-  // Wind at 2m height
-  const u10m = Math.max(1.0, windSpeed); // Minimum for numerical stability
-  const u2m = calculateWindAt2m(u10m);
+  // Wind at 2m height (windSpeed already capped by caller)
+  const u2m = calculateWindAt2m(windSpeed);
 
   // Air properties
   const airProps = calculateAirProperties(TaK, P_Pa);
@@ -431,42 +430,6 @@ function calculateKongNaturalWetBulb(
   Tnw = Math.min(Tnw, 60.0);
 
   return Tnw;
-}
-
-/**
- * Calculate convective heat transfer coefficient for the globe
- *
- * Based on forced convection correlations for flow over a sphere
- *
- * @param windSpeed - Wind speed in m/s
- * @param globeDiameter - Globe diameter in meters
- * @returns Convective heat transfer coefficient in W/m²/K
- */
-function calculateConvectiveCoefficient(
-  windSpeed: number,
-  globeDiameter: number = CONSTANTS.GLOBE_DIAMETER
-): number {
-  // Ensure minimum wind speed for realistic outdoor conditions
-  const v = Math.max(windSpeed, 2);
-
-  // Kinematic viscosity of air at 20°C (m²/s)
-  const nu = 1.5e-5;
-
-  // Thermal conductivity of air (W/m/K)
-  const k = 0.026;
-
-  // Reynolds number
-  const Re = (v * globeDiameter) / nu;
-
-  // Nusselt number for flow over sphere (Whitaker correlation)
-  // Valid for 0.71 < Pr < 380 and 3.5 < Re < 76,000
-  const Pr = 0.71; // Prandtl number for air
-  const Nu = 2 + (0.4 * Math.sqrt(Re) + 0.06 * Math.pow(Re, 2/3)) * Math.pow(Pr, 0.4);
-
-  // Convective heat transfer coefficient
-  const h = (Nu * k) / globeDiameter;
-
-  return h;
 }
 
 /**
@@ -873,12 +836,15 @@ function calculateKongBlackGlobe(
 /**
  * Calculate black globe temperature using full Kong & Huber 2024 method
  *
+ * Internal function used by calculateKongWBGT. Globe temperature is available
+ * in the WBGTResult.globeTemp field.
+ *
  * This solves the heat balance equation for a black globe thermometer using
  * the proper radiation geometry from Kong & Huber (2024) GeoHealth paper.
  *
  * @param Ta - Air temperature in °C
- * @param SR - Total solar radiation in W/m²
- * @param wind - Wind speed in m/s
+ * @param SR - Total solar radiation in W/m² (already zeroed if sun below horizon)
+ * @param wind - Wind speed in m/s (already capped at 2.9 m/s minimum)
  * @param latitude - Latitude in decimal degrees
  * @param longitude - Longitude in decimal degrees
  * @param timestamp - Timestamp for solar angle calculation
@@ -887,31 +853,17 @@ function calculateKongBlackGlobe(
  * @param RH - Relative humidity (%), optional for longwave calculation
  * @returns Black globe temperature in °C
  */
-export function calculateGlobeTemperature(
+function calculateGlobeTemperature(
   Ta: number,
   SR: number,
   wind: number,
-  latitude: number = 0,
-  longitude: number = 151.2093,
-  timestamp: Date = new Date(),
+  latitude: number,
+  longitude: number,
+  timestamp: Date,
   directRad?: number,
   diffuseRad?: number,
   RH: number = 50
 ): number {
-  // Handle nighttime conditions (no solar radiation)
-  if (SR <= 0) {
-    // At night, still calculate with longwave radiation
-    const TaK = Ta + 273.15;
-    const eSatTa = calculateSaturationVaporPressure(Ta);
-    const ea = (RH / 100) * eSatTa;
-
-    const u2m = calculateWindAt2m(Math.max(1.0, wind));
-    const { h_cg, h_rg } = calculateGlobeHeatTransferCoefficients(Ta, u2m);
-    const { LRg } = calculateGlobeRadiation(Ta, 0, ea, 0, 0, 90);
-
-    return calculateKongBlackGlobe(Ta, 0, LRg, h_cg, h_rg);
-  }
-
   // Calculate solar zenith angle using full NOAA algorithm
   const utcOffset = determineUTCOffset(timestamp, longitude);
   const zenithDeg = calculateSolarZenithAngleNOAA(latitude, longitude, timestamp, utcOffset);
@@ -920,13 +872,13 @@ export function calculateGlobeTemperature(
   const eSatTa = calculateSaturationVaporPressure(Ta);
   const ea = (RH / 100) * eSatTa;
 
-  // Calculate wind at 2m
-  const u2m = calculateWindAt2m(Math.max(1.0, wind));
+  // Calculate wind at 2m (wind already capped by caller)
+  const u2m = calculateWindAt2m(wind);
 
   // Calculate heat transfer coefficients
   const { h_cg, h_rg } = calculateGlobeHeatTransferCoefficients(Ta, u2m);
 
-  // Calculate radiation components
+  // Calculate radiation components (SRg returns 0 if SR <= 0)
   const { SRg, LRg } = calculateGlobeRadiation(Ta, SR, ea, directRad, diffuseRad, zenithDeg);
 
   // Calculate globe temperature using Kong zero-iteration formula
@@ -983,6 +935,10 @@ export function calculateKongWBGT(params: WBGTParams): WBGTResult {
     throw new Error(`Solar radiation cannot be negative, got ${solarRadiation}`);
   }
 
+  // Apply minimum wind speed for realistic outdoor conditions
+  // This cap is applied once here and propagated to all calculations
+  const cappedWindSpeed = Math.max(2.9, windSpeed);
+
   // Calculate solar zenith angle
   const utcOffset = determineUTCOffset(timestamp, longitude);
   const zenithDeg = calculateSolarZenithAngleNOAA(latitude, longitude, timestamp, utcOffset);
@@ -1013,14 +969,14 @@ export function calculateKongWBGT(params: WBGTParams): WBGTResult {
     relativeHumidity,
     SRw,
     LRw,
-    windSpeed
+    cappedWindSpeed
   );
 
   // Calculate globe temperature
   const globeTemp = calculateGlobeTemperature(
     temperature,
     SRdown,
-    windSpeed,
+    cappedWindSpeed,
     latitude,
     longitude,
     timestamp,
