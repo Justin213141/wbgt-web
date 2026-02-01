@@ -1,7 +1,5 @@
 1:"$Sreact.fragment"
-2:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/64c0a5e3a0354479.js"],"ViewportBoundary"]
-4:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/64c0a5e3a0354479.js"],"MetadataBoundary"]
-5:"$Sreact.suspense"
-0:{"buildId":"jD8_03PS9_SaMkKcl0z3v","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":"$@3"}],["$","div",null,{"hidden":true,"children":["$","$L4",null,{"children":["$","$5",null,{"name":"Next.Metadata","children":"$@6"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
-3:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
-6:[["$","title","0",{"children":"WBGT Weather Dashboard"}],["$","meta","1",{"name":"description","content":"Real-time heat stress monitoring and running recommendations"}],["$","meta","2",{"name":"generator","content":"v0.app"}]]
+2:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/a2dfb6fc5208ab9b.js"],"ViewportBoundary"]
+3:I[97367,["/wbgt-web/_next/static/chunks/ff1a16fafef87110.js","/wbgt-web/_next/static/chunks/a2dfb6fc5208ab9b.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"7ng1TPMAZUirmvM5iapDX","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"WBGT Weather Dashboard"}],["$","meta","1",{"name":"description","content":"Real-time heat stress monitoring and running recommendations"}],["$","meta","2",{"name":"generator","content":"v0.app"}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
